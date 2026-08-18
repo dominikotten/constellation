@@ -1,0 +1,1368 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Core — 3D E-Mail Dashboard</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='38' fill='none' stroke='%2300ffd0' stroke-width='8'/><circle cx='50' cy='50' r='8' fill='%2300ffd0'/></svg>">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { height:100%; }
+  body { overflow:hidden; background:#04070f; font-family:'Consolas','Courier New',monospace; color:#bcd8ff; user-select:none; -webkit-user-select:none; }
+  canvas { display:block; }
+  #hud { position:fixed; inset:0; pointer-events:none; z-index:10; }
+  .panel { position:relative; background:rgba(8,16,28,0.6); border:1px solid rgba(0,180,255,0.22); border-radius:8px; backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); box-shadow:inset 0 0 24px rgba(0,140,255,0.06), 0 4px 18px rgba(0,0,0,0.5); }
+  .jarvis-corner::before, .jarvis-corner::after { content:''; position:absolute; width:12px; height:12px; pointer-events:none; }
+  .jarvis-corner::before { top:-2px; left:-2px; border-top:2px solid rgba(0,190,255,0.8); border-left:2px solid rgba(0,190,255,0.8); border-top-left-radius:8px; }
+  .jarvis-corner::after { bottom:-2px; right:-2px; border-bottom:2px solid rgba(0,190,255,0.8); border-right:2px solid rgba(0,190,255,0.8); border-bottom-right-radius:8px; }
+  #titlePanel { position:absolute; top:18px; left:20px; padding:14px 20px; }
+  #titlePanel h1 { font-size:20px; letter-spacing:6px; color:#8adcff; text-shadow:0 0 14px rgba(0,160,255,0.9); }
+  #titlePanel p { font-size:10px; letter-spacing:3px; color:#6f8fb0; margin-top:5px; }
+  #progressPanel { position:absolute; top:18px; left:50%; transform:translateX(-50%); width:min(360px,70vw); padding:12px 18px 10px; text-align:center; }
+  #progressText { font-size:15px; letter-spacing:2px; color:#e6f4ff; }
+  #progressBar { height:6px; background:rgba(0,160,255,0.12); border-radius:3px; overflow:hidden; margin-top:8px; }
+  #progressBar > div { height:100%; width:0%; background:linear-gradient(90deg,#00d4ff,#3d9dff); box-shadow:0 0 10px rgba(0,180,255,0.9); transition:width 0.15s linear; }
+  #stateText { font-size:10px; letter-spacing:3px; color:#00d4ff; margin-top:6px; min-height:12px; }
+  #stateText.blink { animation:blink 0.8s steps(2,start) infinite; }
+  @keyframes blink { to { visibility:hidden; } }
+  #statsPanel { position:absolute; bottom:20px; left:20px; padding:12px 18px; font-size:11px; letter-spacing:1px; line-height:2; }
+  #statsPanel .row { color:#8fb4d8; }
+  #statsPanel .row span { color:#d6f2ff; }
+  #legendPanel { position:absolute; bottom:20px; right:20px; padding:10px 16px; font-size:10px; letter-spacing:1px; line-height:2; color:#8fb4d8; }
+  #legendPanel .legend-item { display:flex; align-items:center; gap:8px; }
+  #legendPanel .dot { width:8px; height:8px; border-radius:50%; display:inline-block; box-shadow:0 0 6px currentColor; }
+  #controlsPanel { position:absolute; top:70px; right:20px; width:230px; padding:12px 14px; pointer-events:auto; }
+  .controls-header { display:flex; justify-content:space-between; align-items:center; }
+  .controls-header span { font-size:11px; letter-spacing:3px; color:#8adcff; }
+  #controlsToggle { background:none; border:1px solid rgba(0,180,255,0.22); color:#8adcff; width:22px; height:22px; border-radius:4px; cursor:pointer; font-size:13px; line-height:1; }
+  #controlsToggle:hover { background:rgba(0,180,255,0.15); }
+  #controlsBody { margin-top:8px; }
+  #controlsBody label { display:flex; justify-content:space-between; font-size:10px; letter-spacing:1px; color:#8fb4d8; margin-top:8px; }
+  #controlsBody label span { color:#d6f2ff; }
+  #controlsBody input[type=range] { -webkit-appearance:none; appearance:none; width:100%; height:4px; margin-top:3px; background:rgba(0,160,255,0.15); border-radius:2px; outline:none; }
+  #controlsBody input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; width:12px; height:12px; border-radius:50%; background:#00d4ff; box-shadow:0 0 8px rgba(0,180,255,0.9); cursor:pointer; border:none; }
+  #controlsBody input[type=range]::-moz-range-thumb { width:12px; height:12px; border-radius:50%; background:#00d4ff; border:none; box-shadow:0 0 8px rgba(0,180,255,0.9); cursor:pointer; }
+  #restartBtn { position:absolute; top:18px; right:20px; pointer-events:auto; background:rgba(8,16,28,0.6); border:1px solid rgba(0,180,255,0.22); color:#8adcff; font-family:inherit; font-size:11px; letter-spacing:3px; padding:10px 16px; border-radius:8px; cursor:pointer; transition:all .2s; }
+  #restartBtn:hover { background:rgba(0,180,255,0.15); box-shadow:0 0 16px rgba(0,180,255,0.4); }
+  #restartBtn:disabled { opacity:0.4; cursor:default; animation:none; }
+  #restartBtn:not(:disabled) { animation:btnPulse 2s infinite; }
+  @keyframes btnPulse { 0%,100% { box-shadow:0 0 8px rgba(0,180,255,0.25); } 50% { box-shadow:0 0 22px rgba(0,180,255,0.7); } }
+  #tooltip { position:fixed; display:none; z-index:20; pointer-events:none; background:rgba(4,12,20,0.92); border:1px solid rgba(0,190,255,0.35); border-radius:6px; padding:8px 12px; font-size:11px; line-height:1.7; box-shadow:0 0 16px rgba(0,160,255,0.2); white-space:nowrap; }
+  #tooltip .tt-name { color:#d6f2ff; }
+  #scanlines { position:fixed; inset:0; pointer-events:none; z-index:6; background:repeating-linear-gradient(0deg, rgba(40,100,180,0.05) 0px, rgba(40,100,180,0.05) 1px, transparent 1px, transparent 3px); }
+  #vignette { position:fixed; inset:0; pointer-events:none; z-index:5; background:radial-gradient(ellipse at center, transparent 50%, rgba(0,4,16,0.75) 100%); }
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="panel jarvis-corner" id="titlePanel">
+    <h1>AI CORE</h1>
+    <p>HOLOGRAPHIC E-MAIL SORTING SYSTEM</p>
+  </div>
+  <div class="panel jarvis-corner" id="progressPanel">
+    <div id="progressText">0 / 588</div>
+    <div id="progressBar"><div></div></div>
+    <div id="stateText">BEREIT &mdash; DR&Uuml;CKE DOWNLOAD</div>
+  </div>
+  <button id="restartBtn">&#9654; DOWNLOAD</button>
+  <div class="panel" id="statsPanel">
+    <div class="row">ZEIT&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span id="elapsedText">0.0s</span></div>
+    <div class="row">RATE&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span id="rateText">0.0</span> Dateien/s</div>
+    <div class="row">DATEIEN&nbsp;&nbsp;<span id="pointsText">588</span></div>
+  </div>
+  <div class="panel" id="legendPanel">
+    <div class="legend-item"><span class="dot" style="background:#4a6a8a;color:#4a6a8a"></span>NICHT RUNTERGELADEN</div>
+    <div class="legend-item"><span class="dot" style="background:#00fff2;color:#00fff2"></span>RUNTERGELADEN</div>
+    <div class="legend-item"><span class="dot" style="background:#9fffee;color:#9fffee"></span>SORTIERT</div>
+    <div class="legend-item"><span class="dot" style="background:#ff3355;color:#ff3355"></span>VERARBEITUNGSFEHLER</div>
+  </div>
+  <div class="panel" id="controlsPanel">
+    <div class="controls-header">
+      <span>REGLER</span>
+      <button id="controlsToggle" title="Ein-/Ausklappen">&minus;</button>
+    </div>
+    <div id="controlsBody">
+      <label>BLOOM ST&Auml;RKE <span id="valStrength">0.30</span></label>
+      <input type="range" id="ctlStrength" min="0" max="3" step="0.01" value="0.3">
+      <label>BLOOM RADIUS <span id="valRadius">0.13</span></label>
+      <input type="range" id="ctlRadius" min="0" max="2" step="0.01" value="0.13">
+      <label>BLOOM SCHWELLE <span id="valThreshold">0.60</span></label>
+      <input type="range" id="ctlThreshold" min="0" max="1" step="0.01" value="0.6">
+      <label>HELLIGKEIT <span id="valExposure">1.19</span></label>
+      <input type="range" id="ctlExposure" min="0.4" max="2" step="0.01" value="1.19">
+      <label>CORE GLOW <span id="valCoreGlow">1.59</span></label>
+      <input type="range" id="ctlCoreGlow" min="0.2" max="3" step="0.01" value="1.59">
+      <label>PUNKT GLOW <span id="valPointGlow">0.90</span></label>
+      <input type="range" id="ctlPointGlow" min="0.2" max="3" step="0.01" value="0.9">
+    </div>
+  </div>
+</div>
+<div id="tooltip"></div>
+<div id="scanlines"></div>
+<div id="vignette"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+/* ================= Renderer ================= */
+const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.19;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x050510);
+
+const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.1, 300);
+camera.position.set(0, 3, 15); // Start so weit draussen, dass alles sichtbar ist
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.6;
+controls.minDistance = 15; // nie naeher -> man sieht immer die ganze Kugel
+controls.maxDistance = 24;
+
+/* ================= Environment + Lights ================= */
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+scene.add(new THREE.AmbientLight(0x404060, 1.1));
+const keyLight = new THREE.PointLight(0xffffff, 150, 50, 2);
+keyLight.position.set(5, 8, 6);
+scene.add(keyLight);
+
+/* ================= AI Core (kristallin, Protoss) ================= */
+const CORE_LIGHT_BASE     = 60;
+const CORE_LIGHT_PULSE    = 35;
+const coreMat = new THREE.ShaderMaterial({
+  uniforms: {
+    uTime: { value: 0 },
+    uGlow: { value: 1.59 },
+    uColor: { value: new THREE.Color(0x00eaff) }
+  },
+  vertexShader: `
+    varying vec3 vN; varying vec3 vV; varying vec3 vPos;
+    void main(){
+      vN = normalize(normalMatrix * normal);
+      vec4 mv = modelViewMatrix * vec4(position, 1.0);
+      vV = normalize(-mv.xyz);
+      vPos = position;
+      gl_Position = projectionMatrix * mv;
+    }`,
+  fragmentShader: `
+    uniform float uTime, uGlow;
+    uniform vec3 uColor;
+    varying vec3 vN; varying vec3 vV; varying vec3 vPos;
+    void main(){
+      float fresnel = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 3.0);
+      // Facetten-Kanten hervorheben (Kristall-Look)
+      float edge = smoothstep(0.4, 0.5, fresnel);
+      // Energie-Adern: pulsierende Linien ueber die Oberflaeche
+      float veins = sin(vPos.x*8.0 + uTime*2.0) * sin(vPos.y*8.0 - uTime*1.5) * sin(vPos.z*8.0 + uTime);
+      veins = smoothstep(0.85, 1.0, veins);
+      vec3 col = uColor * (0.3 + fresnel*1.4 + edge*1.5 + veins*2.0) * uGlow;
+      gl_FragColor = vec4(col, 1.0);
+    }`,
+  transparent: false
+});
+const core = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 2), coreMat);
+scene.add(core);
+const coreLight = new THREE.PointLight(0x00eaff, CORE_LIGHT_BASE, 30, 2);
+core.add(coreLight);
+
+/* ================= Positionen ================= */
+const TOTAL = 588;
+const SHELL_RADIUS = 5;
+const CENTER = new THREE.Vector3(0, 0, 0);
+
+function fibonacciSphere(samples, radius){
+  const pts = [];
+  const phi = Math.PI * (3 - Math.sqrt(5)); // goldener Winkel
+  for (let i = 0; i < samples; i++){
+    const y  = 1 - (i / (samples - 1)) * 2;
+    const r  = Math.sqrt(Math.max(0, 1 - y*y));
+    const th = phi * i;
+    pts.push(new THREE.Vector3(Math.cos(th)*r*radius, y*radius, Math.sin(th)*r*radius));
+  }
+  return pts;
+}
+// Perfekte Kugel = Endergebnis (sortiert)
+const perfectPositions = fibonacciSphere(TOTAL, SHELL_RADIUS);
+
+// Komplett zufaellige 3D-Wolke fuer den Start (nicht runtergeladen)
+const randomPositions = [];
+function scatterPositions(){
+  for (let i = 0; i < TOTAL; i++){
+    // Zufallspunkt gleichmaessig im Kugelvolumen verteilt (keine perfekte Schale!)
+    const r = SHELL_RADIUS * (0.55 + 0.75 * Math.cbrt(Math.random()));
+    randomPositions[i] = new THREE.Vector3().randomDirection().multiplyScalar(r);
+  }
+}
+scatterPositions();
+
+/* ================= Punkte (InstancedMesh + Hologramm-Shader) ================= */
+// Shader mit Kugel-Schatten + Fresnel-Rand -> 3D-Hologramm statt flacher Platten
+const pointMat = new THREE.ShaderMaterial({
+  uniforms: { uGlow: { value: 0.9 } },
+  vertexShader: `
+    #include <common>
+    #include <color_pars_vertex>
+    varying vec3 vN;
+    varying vec3 vV;
+    varying vec3 vCol;
+    void main(){
+      #include <begin_vertex>
+      #include <color_vertex>
+      #include <project_vertex>
+      vN = normalize(normalMatrix * normal);
+      vV = normalize(-mvPosition.xyz);
+      vCol = vColor;
+    }
+  `,
+  fragmentShader: `
+    uniform float uGlow;
+    varying vec3 vN;
+    varying vec3 vV;
+    varying vec3 vCol;
+    void main(){
+      float ndv = abs(dot(normalize(vN), normalize(vV)));
+      float fresnel = pow(1.0 - ndv, 2.5);
+      float shade = mix(0.25, 1.0, ndv);
+      vec3 col = vCol * (shade + fresnel * 1.8) * uGlow;
+      gl_FragColor = vec4(col, 1.0);
+    }
+  `,
+  transparent: true,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending
+});
+const pointField = new THREE.InstancedMesh(new THREE.SphereGeometry(0.12, 16, 16), pointMat, TOTAL);
+pointField.frustumCulled = false;
+const dummy = new THREE.Object3D();
+function setInstance(i, pos, scale){
+  dummy.position.copy(pos);
+  dummy.scale.setScalar(scale);
+  dummy.updateMatrix();
+  pointField.setMatrixAt(i, dummy.matrix);
+}
+// Jeder Punkt bekommt eine eigene Umlaufbahn + eigene Geschwindigkeit (nicht starr)
+const orbitAxes = [];
+const orbitSpeeds = [];
+const orbitAxisTmp = new THREE.Vector3();
+for (let i = 0; i < TOTAL; i++){
+  orbitAxes[i] = new THREE.Vector3().randomDirection();
+  orbitSpeeds[i] = 0.05 + Math.random() * 0.25;
+}
+function setInstanceOrbiting(i, basePos, scale, t){
+  dummy.position.copy(basePos);
+  orbitAxisTmp.copy(orbitAxes[i]);
+  dummy.position.applyAxisAngle(orbitAxisTmp, orbitSpeeds[i] * t);
+  dummy.scale.setScalar(scale);
+  dummy.updateMatrix();
+  pointField.setMatrixAt(i, dummy.matrix);
+}
+const orbitScratch = new THREE.Vector3();
+function orbitPosition(i, basePos, t){
+  orbitScratch.copy(basePos);
+  orbitAxisTmp.copy(orbitAxes[i]);
+  orbitScratch.applyAxisAngle(orbitAxisTmp, orbitSpeeds[i] * t);
+  return orbitScratch;
+}
+for (let i = 0; i < TOTAL; i++) setInstance(i, randomPositions[i], 0);
+pointField.instanceMatrix.needsUpdate = true;
+
+// 3 Status (Protoss-Cyan-Palette): STAHLBLAU = nicht runtergeladen | CYAN = runtergeladen | EISWEISS = sortiert | ROT = Fehler
+const COLOR_GRAY  = new THREE.Color(0x4a6a8a).multiplyScalar(2.0);
+const COLOR_GREEN = new THREE.Color(0x00fff2).multiplyScalar(4.0); // reines Cyan
+const COLOR_CYAN  = new THREE.Color(0x9fffee).multiplyScalar(4.5); // fast weisses Cyan
+const COLOR_FAIL  = new THREE.Color(0xff3355).multiplyScalar(4.0);
+const COLOR_FLASH = new THREE.Color(0xeafffb).multiplyScalar(3.0); // fast weisser Blitz
+
+// ~7% der Dateien scheitern bei der Verarbeitung -> rot am Ende
+const failFlags = new Array(TOTAL).fill(false);
+let failCount = 0;
+function pickFails(){
+  failFlags.fill(false);
+  const n = Math.max(1, Math.floor(TOTAL * 0.07));
+  let picked = 0;
+  while (picked < n){
+    const i = Math.floor(Math.random() * TOTAL);
+    if (!failFlags[i]){ failFlags[i] = true; picked++; }
+  }
+  failCount = n;
+}
+pickFails();
+for (let i = 0; i < TOTAL; i++) pointField.setColorAt(i, COLOR_GRAY);
+pointField.instanceColor.needsUpdate = true;
+scene.add(pointField);
+
+/* ================= Jarvis-Hologramm (Frames, Orbits, Grid) ================= */
+function makeHoloSphere(radius, opacity){
+  const mesh = new THREE.Mesh(
+    new THREE.SphereGeometry(radius, 32, 20),
+    new THREE.MeshBasicMaterial({
+      color: new THREE.Color(0x1e8fff).multiplyScalar(1.6),
+      wireframe: true,
+      transparent: true,
+      opacity: opacity,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    })
+  );
+  mesh.frustumCulled = false;
+  scene.add(mesh);
+  return mesh;
+}
+const holoOuter = makeHoloSphere(5.4, 0.10); // Hologramm-Kugel um das ganze System
+const holoInner = makeHoloSphere(1.4, 0.35);  // Hologramm-Frame um den Core
+
+function makeCircleRing(radius, opacity){
+  const pts = [];
+  for (let i = 0; i <= 72; i++){
+    const a = (i / 72) * Math.PI * 2;
+    pts.push(new THREE.Vector3(Math.cos(a)*radius, 0, Math.sin(a)*radius));
+  }
+  const line = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints(pts),
+    new THREE.LineBasicMaterial({
+      color: new THREE.Color(0x00c8ff).multiplyScalar(1.6),
+      transparent: true,
+      opacity: opacity,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    })
+  );
+  line.frustumCulled = false;
+  scene.add(line);
+  return line;
+}
+const orbit1 = makeCircleRing(2.4, 0.45); // Kreisel-Ringe (Jarvis-Orbits)
+const orbit2 = makeCircleRing(3.5, 0.3);
+const orbit3 = makeCircleRing(4.6, 0.2);
+orbit1.rotation.x = 1.25;
+orbit2.rotation.x = 1.65; orbit2.rotation.z = 0.7;
+orbit3.rotation.x = 0.85; orbit3.rotation.z = 1.15;
+// Enge Analyse-Ringe um den Core (nur waehrend der Verarbeitung sichtbar)
+const analyzer1 = makeCircleRing(1.45, 0);
+const analyzer2 = makeCircleRing(1.95, 0);
+analyzer1.rotation.x = 0.55;
+analyzer2.rotation.x = 1.15; analyzer2.rotation.z = 0.6;
+// Kristallin-Shield-Panel (gegenlaeufig zu den Ringen)
+function makeShieldPanel(radius, opacity){
+  const geo = new THREE.IcosahedronGeometry(radius, 1);
+  const mat = new THREE.MeshBasicMaterial({
+    color: new THREE.Color(0x00eaff),
+    wireframe: true,
+    transparent: true,
+    opacity: opacity,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.frustumCulled = false;
+  scene.add(mesh);
+  return mesh;
+}
+const shieldPanel = makeShieldPanel(1.7, 0.4);
+
+function createPolarGrid(){
+  const group = new THREE.Group();
+  const mat = new THREE.LineBasicMaterial({
+    color: new THREE.Color(0x1e8fff).multiplyScalar(1.3),
+    transparent: true,
+    opacity: 0.18,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  });
+  for (let r = 1; r <= 7; r++){
+    const pts = [];
+    for (let i = 0; i <= 64; i++){
+      const a = (i / 64) * Math.PI * 2;
+      pts.push(new THREE.Vector3(Math.cos(a)*r, 0, Math.sin(a)*r));
+    }
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat);
+    line.frustumCulled = false;
+    group.add(line);
+  }
+  for (let k = 0; k < 24; k++){
+    const a = (k / 24) * Math.PI * 2;
+    const line = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(Math.cos(a)*7, 0, Math.sin(a)*7)
+      ]), mat);
+    line.frustumCulled = false;
+    group.add(line);
+  }
+  group.position.y = -5.4;
+  scene.add(group);
+  return group;
+}
+const polarGrid = createPolarGrid();
+
+/* ================= Schwebende Daten-Texte (nur waehrend der Verarbeitung, klein & eng am Core) ================= */
+const TEXT_PHRASES = [
+  'OCR', 'PARSE', 'INDEX', 'HASH', 'AES-256', 'SHA-1', 'TLS', 'SYNC',
+  'STREAM', 'CACHE', 'QUEUE', 'SORT', 'SCAN', 'ENCODE', 'DECODE', 'MATCH',
+  '0x4F2A', '0xB8D1', '0x9C7E', '#A3C1FF', '#00D4FF', '#7FD0FF',
+  '42 KB', '1.3 MB', '256 b/s', '512 b/s', 'x:0.42', 'y:1.13',
+  '87%', '99.9%', '45.2%', '128 bit', 'SHA-256', 'AES-128'
+];
+const TEXT_COLORS = ['#a9e2ff', '#7fd0ff', '#ffffff', '#00d4ff'];
+
+function makeUnderlineTexture(){
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 16;
+  const ctx = c.getContext('2d');
+  const g = ctx.createLinearGradient(0, 8, 64, 8);
+  g.addColorStop(0, 'rgba(255,255,255,0)');
+  g.addColorStop(0.2, 'rgba(150,220,255,0.95)');
+  g.addColorStop(0.8, 'rgba(150,220,255,0.95)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 7, 64, 2);
+  return new THREE.CanvasTexture(c);
+}
+const underlineTex = makeUnderlineTexture();
+
+function makeTextSprite(text){
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 32;
+  const ctx = canvas.getContext('2d');
+  const texture = new THREE.CanvasTexture(canvas);
+  const color = TEXT_COLORS[Math.floor(Math.random() * TEXT_COLORS.length)];
+  function draw(txt){
+    ctx.clearRect(0, 0, 128, 32);
+    ctx.font = 'bold 14px Consolas, "Courier New", monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor = 'rgba(0,180,255,0.9)';
+    ctx.shadowBlur = 4;
+    ctx.fillStyle = color;
+    ctx.fillText(txt, 64, 16);
+    ctx.shadowBlur = 0;
+    ctx.fillText(txt, 64, 16);
+    texture.needsUpdate = true;
+  }
+  draw(text);
+
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    opacity: 0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  }));
+  const base = 0.28 + Math.random() * 0.14; // ganz klein
+  sprite.scale.set(base, base * 0.25, 1);
+  sprite.frustumCulled = false;
+  scene.add(sprite);
+
+  // Unterstrich-Balken unter dem Text
+  const underline = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: underlineTex,
+    transparent: true,
+    opacity: 0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  }));
+  underline.scale.set(base * 0.85, base * 0.12, 1);
+  underline.frustumCulled = false;
+  scene.add(underline);
+
+  // Leader-Linie vom Core zum Label
+  const lineGeo = new THREE.BufferGeometry();
+  lineGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+  const line = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({
+    color: new THREE.Color(0x4fb0ff).multiplyScalar(1.5),
+    transparent: true,
+    opacity: 0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  }));
+  line.frustumCulled = false;
+  scene.add(line);
+
+  return {
+    sprite, underline, line,
+    setText: draw,
+    radius: 1.25 + Math.random() * 1.35, // ganz nah am Core
+    speed: 0.15 + Math.random() * 0.35,
+    y: (Math.random() - 0.5) * 2.0,
+    phase: Math.random() * Math.PI * 2,
+    bobSpeed: 0.6 + Math.random() * 0.8,
+    base: base
+  };
+}
+// Astrolabium-Anordnung (Variante A): Labels auf konzentrischen Ringen, jeder Ring rotiert starr
+const RING_CONFIG = [
+  { radius: 1.45, y: -0.75, speed: 0.18 },
+  { radius: 1.9,  y: -0.25, speed: -0.12 },
+  { radius: 2.3,  y: 0.3,   speed: 0.15 },
+  { radius: 2.7,  y: 0.8,   speed: -0.1 }
+];
+const PER_RING = 16; // 4 Ringe x 16 = 64 Labels
+const floatTexts = [];
+let txtIdx = 0;
+for (let r = 0; r < RING_CONFIG.length; r++){
+  const cfg = RING_CONFIG[r];
+  for (let k = 0; k < PER_RING; k++){
+    const phrase = TEXT_PHRASES[txtIdx % TEXT_PHRASES.length];
+    const suffix = Math.random() < 0.5 ? '' : '_' + (txtIdx % 9);
+    const ft = makeTextSprite(phrase + suffix);
+    ft.radius = cfg.radius;
+    ft.y = cfg.y;
+    ft.speed = cfg.speed;
+    ft.phase = (k / PER_RING) * Math.PI * 2;
+    ft.ring = r;
+    ft.slot = k;
+    floatTexts.push(ft);
+    txtIdx++;
+  }
+}
+
+// ===== Sternbild-Kanten (Ring-Ketten + radiale Querverbindungen) =====
+const edges = [];
+for (let r = 0; r < RING_CONFIG.length; r++){
+  for (let k = 0; k < PER_RING; k++){
+    edges.push([r * PER_RING + k, r * PER_RING + ((k + 1) % PER_RING)]);
+  }
+}
+for (let r = 0; r < RING_CONFIG.length - 1; r++){
+  for (let k = 0; k < PER_RING; k++){
+    edges.push([r * PER_RING + k, (r + 1) * PER_RING + k]);
+  }
+}
+const constGeo = new THREE.BufferGeometry();
+const constPos = new THREE.BufferAttribute(new Float32Array(edges.length * 2 * 3), 3);
+constGeo.setAttribute('position', constPos);
+constGeo.setDrawRange(0, edges.length * 2);
+const constMat = new THREE.LineBasicMaterial({
+  color: new THREE.Color(0x3f9fff).multiplyScalar(1.4),
+  transparent: true,
+  opacity: 0,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+});
+const constLines = new THREE.LineSegments(constGeo, constMat);
+constLines.frustumCulled = false;
+scene.add(constLines);
+
+// ===== Astrolabium-Ring mit Grad-Strichen (Algalon-Touch) =====
+const astrolabe = (() => {
+  const group = new THREE.Group();
+  const mat = new THREE.LineBasicMaterial({
+    color: new THREE.Color(0x2f8fe0).multiplyScalar(1.2),
+    transparent: true,
+    opacity: 0.15,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  });
+  const circlePts = [];
+  for (let i = 0; i <= 72; i++){
+    const a = (i / 72) * Math.PI * 2;
+    circlePts.push(new THREE.Vector3(Math.cos(a) * 3.3, 0, Math.sin(a) * 3.3));
+  }
+  const circle = new THREE.Line(new THREE.BufferGeometry().setFromPoints(circlePts), mat);
+  circle.frustumCulled = false;
+  group.add(circle);
+  const tickPts = [];
+  for (let i = 0; i < 36; i++){
+    const a = (i / 36) * Math.PI * 2;
+    tickPts.push(new THREE.Vector3(Math.cos(a) * 3.2, 0, Math.sin(a) * 3.2));
+    tickPts.push(new THREE.Vector3(Math.cos(a) * 3.4, 0, Math.sin(a) * 3.4));
+  }
+  const ticks = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(tickPts), mat);
+  ticks.frustumCulled = false;
+  group.add(ticks);
+  scene.add(group);
+  return group;
+})();
+let lastScrambleTime = -1;
+function updateFloatTexts(now){
+  const inProcess = phase === PHASE_PROCESS;
+  const pulling = phase === PHASE_PAUSE;
+  let target = 0;
+  let s = 1;
+  let fade = 1;
+  if (inProcess){
+    target = 0.9;
+  } else if (pulling){
+    target = 0.9;
+    // Formeln schnell in den Core einsaugen (erste 0.35s der Pause)
+    const pullT = Math.min(1, (now - pauseStart) / 0.35);
+    s = 1 - easeInCubic(pullT);
+    // 200ms-Takt: Formeln scramblen zu anderen Texten
+    if (now - lastScrambleTime > 0.2){
+      for (const ft of floatTexts){
+        ft.setText(TEXT_PHRASES[Math.floor(Math.random() * TEXT_PHRASES.length)]);
+      }
+      lastScrambleTime = now;
+    }
+    // kurz vor der Explosion ausblenden
+    fade = 1 - Math.max(0, (now - pauseStart - 0.65) / 0.35);
+  }
+  for (const ft of floatTexts){
+    const a = ft.phase + ft.speed * now;
+    const px = Math.cos(a) * ft.radius * s;
+    const py = (ft.y + Math.sin(now * ft.bobSpeed + ft.phase) * 0.2) * s;
+    const pz = Math.sin(a) * ft.radius * s;
+    ft.sprite.position.set(px, py, pz);
+    ft.underline.position.set(px, py - ft.base * 0.22 * s, pz);
+    // Leader-Linie Core -> Label (zieht mit)
+    const posArr = ft.line.geometry.attributes.position.array;
+    posArr[3] = px; posArr[4] = py; posArr[5] = pz;
+    ft.line.geometry.attributes.position.needsUpdate = true;
+
+    const pulse = 0.75 + 0.25 * Math.sin(now * 1.6 + ft.phase * 3);
+    const o = target * fade * pulse;
+    ft.sprite.material.opacity += (o - ft.sprite.material.opacity) * 0.12;
+    ft.underline.material.opacity += (o * 0.8 - ft.underline.material.opacity) * 0.12;
+    ft.line.material.opacity += (o * 0.6 - ft.line.material.opacity) * 0.12;
+  }
+  // Sternbild-Kanten schreiben (1 Draw-Call)
+  const cp = constPos.array;
+  for (let e = 0; e < edges.length; e++){
+    const fa = floatTexts[edges[e][0]].sprite.position;
+    const fb = floatTexts[edges[e][1]].sprite.position;
+    const o6 = e * 6;
+    cp[o6]     = fa.x; cp[o6 + 1] = fa.y; cp[o6 + 2] = fa.z;
+    cp[o6 + 3] = fb.x; cp[o6 + 4] = fb.y; cp[o6 + 5] = fb.z;
+  }
+  constPos.needsUpdate = true;
+  constMat.opacity += ((target * fade * 0.45) - constMat.opacity) * 0.12;
+  astrolabe.rotation.y = now * 0.05; // Astrolabium dreht langsam
+}
+
+/* ================= Datei-Metadaten (Tooltips) ================= */
+const EXTENSIONS = ['eml','msg','pdf','docx','zip','png','xlsx','json'];
+const fileMeta = [];
+for (let i = 0; i < TOTAL; i++){
+  fileMeta.push({
+    name: 'mail_' + String(i).padStart(4,'0') + '.' + EXTENSIONS[i % EXTENSIONS.length],
+    size: (Math.random()*480 + 2).toFixed(1)
+  });
+}
+/* ================= Partikel-Pool ================= */
+const MAX_PARTICLES = 1200;
+const pGeo = new THREE.BufferGeometry();
+const pPos = new THREE.BufferAttribute(new Float32Array(MAX_PARTICLES*3), 3);
+const pCol = new THREE.BufferAttribute(new Float32Array(MAX_PARTICLES*3), 3);
+pGeo.setAttribute('position', pPos);
+pGeo.setAttribute('color', pCol);
+pGeo.setDrawRange(0, 0);
+// Runde Soft-Sprite-Textur statt eckiger GL_POINTS
+function makeSoftDotTexture(){
+  const size = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const grad = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.35, 'rgba(255,255,255,0.7)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+  return new THREE.CanvasTexture(canvas);
+}
+const pMat = new THREE.PointsMaterial({
+  size: 0.28,
+  map: makeSoftDotTexture(),
+  vertexColors: true,
+  transparent: true,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+});
+const pSys = new THREE.Points(pGeo, pMat);
+pSys.frustumCulled = false;
+scene.add(pSys);
+const pBaseColor = new THREE.Color(0x66c8ff).multiplyScalar(2.5);
+const particles = [];
+const freeSlots = [];
+let slotCount = 0;
+
+// Geordnete Daten-Scheibe: Partikel umkreisen den Core in EINER Richtung (wie ein Laufwerk)
+function spawnProcessingParticle(){
+  if (slotCount >= MAX_PARTICLES && freeSlots.length === 0) return;
+  const slot = freeSlots.length ? freeSlots.pop() : slotCount++;
+  particles.push({
+    slot,
+    radius: 1.35 + Math.random() * 1.15,
+    y: (Math.random() - 0.5) * 0.9,
+    angSpeed: 2.5 + Math.random() * 2.0,
+    dir: 1,
+    phase: Math.random() * Math.PI * 2,
+    t: 0,
+    life: 1.6
+  });
+}
+function updateParticles(dt){
+  if (!particles.length){ pGeo.setDrawRange(0, 0); return; }
+  let maxSlot = 0;
+  for (let i = particles.length - 1; i >= 0; i--){
+    const p = particles[i];
+    p.t += dt;
+    if (p.t >= p.life){ freeSlots.push(p.slot); particles.splice(i, 1); continue; }
+    const u = p.t / p.life;
+    const fade = 1 - u;
+    const ang = p.phase + p.angSpeed * p.t * p.dir;
+    const bob = Math.sin(p.t * 2.2 + p.phase) * 0.22;
+    pPos.setXYZ(p.slot,
+      Math.cos(ang) * p.radius,
+      p.y + bob * fade,
+      Math.sin(ang) * p.radius);
+    pCol.setXYZ(p.slot, pBaseColor.r*fade, pBaseColor.g*fade, pBaseColor.b*fade);
+    if (p.slot > maxSlot) maxSlot = p.slot;
+  }
+  pGeo.setDrawRange(0, maxSlot + 1);
+  pPos.needsUpdate = true;
+  pCol.needsUpdate = true;
+}
+
+/* ================= Sternenhimmel ================= */
+const STARS = 900;
+const starGeo = new THREE.BufferGeometry();
+{
+  const arr = new Float32Array(STARS*3);
+  for (let i = 0; i < STARS; i++){
+    const v = new THREE.Vector3().randomDirection().multiplyScalar(30 + Math.random()*25);
+    arr[i*3] = v.x; arr[i*3+1] = v.y; arr[i*3+2] = v.z;
+  }
+  starGeo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+}
+const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({
+  color: 0x9fb4ff, size: 0.16, transparent: true, opacity: 0.75, sizeAttenuation: true
+}));
+stars.frustumCulled = false;
+scene.add(stars);
+
+/* ================= Post-Processing (Bloom) ================= */
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.3, 0.13, 0.5);
+composer.addPass(bloomPass);
+composer.addPass(new OutputPass());
+// Leichte chromatische Aberration -> "Energie unter Spannung"
+const chromaPass = new ShaderPass({
+  uniforms: { tDiffuse: { value: null }, uAmount: { value: 0.0025 } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+  fragmentShader: `
+    uniform sampler2D tDiffuse; uniform float uAmount;
+    varying vec2 vUv;
+    void main(){
+      vec2 dir = (vUv - 0.5) * uAmount;
+      float r = texture2D(tDiffuse, vUv - dir).r;
+      float g = texture2D(tDiffuse, vUv).g;
+      float b = texture2D(tDiffuse, vUv + dir).b;
+      gl_FragColor = vec4(r,g,b,1.0);
+    }`
+});
+composer.addPass(chromaPass);
+
+/* ================= Phasen & Timing ================= */
+const PHASE_IDLE = -1, PHASE_SCAN = 0, PHASE_DOWNLOAD = 1, PHASE_PROCESS = 2, PHASE_PAUSE = 3, PHASE_EXPLODE = 4, PHASE_COMPLETE = 5;
+const SCAN_DURATION   = 2.5;   // E-Mails finden (Punkte erscheinen)
+const POP_DURATION    = 0.18;  // Dauer des einzelnen Aufpoppens
+const PULL_DURATION   = 0.5;   // Dauer des Reinsaugens eines Punktes
+const FILES_PER_SECOND = 45;   // Dateien werden random reingezogen
+const PROCESS_DURATION = 10.0; // Core pulsiert -> E-Mails werden verarbeitet
+const PAUSE_DURATION  = 1.0;   // Puls stoppt, dann Explosion
+const EXPLODE_DURATION = 1.2;  // Explosion in die perfekte Kugel
+
+let timeNow = 0;
+let phase = PHASE_IDLE;
+let cycleStart = 0, downloadStart = 0, processStart = 0, pauseStart = 0, explodeStart = 0, completeStart = 0;
+let appearFinished = false;
+let downloadedCount = 0;
+let foundCount = 0;
+let explodeInitialized = false;
+
+function shuffle(a){
+  for (let i = a.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+let downloadOrder = shuffle([...Array(TOTAL).keys()]);
+const pullStart = new Array(TOTAL).fill(-1);
+const explodeDelay = new Array(TOTAL).fill(0);
+const scanned = new Array(TOTAL).fill(false); // beim Auftauchen aufblitzen
+const impactDone = new Array(TOTAL).fill(false); // Welle schon ausgeloest?
+
+function resetTimers(){
+  cycleStart    = performance.now() / 1000;
+  downloadStart = cycleStart + SCAN_DURATION; // kein Gap -> kein Freeze am Uebergang
+  processStart  = downloadStart + TOTAL / FILES_PER_SECOND + PULL_DURATION;
+  pauseStart    = processStart + PROCESS_DURATION;
+  explodeStart  = pauseStart + PAUSE_DURATION;
+  completeStart = explodeStart + EXPLODE_DURATION + 0.5;
+}
+resetTimers();
+
+function computePhase(now){
+  if (now < downloadStart) return PHASE_SCAN;
+  if (now < processStart)  return PHASE_DOWNLOAD;
+  if (now < pauseStart)    return PHASE_PROCESS;
+  if (now < explodeStart)  return PHASE_PAUSE;
+  if (now < completeStart) return PHASE_EXPLODE;
+  return PHASE_COMPLETE;
+}
+
+function easeOutBack(t){
+  const c1 = 1.70158, c3 = c1 + 1;
+  return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+}
+function easeInCubic(t){ return t*t*t; }
+function easeOutCubic(t){ const u = 1 - t; return 1 - u*u*u; }
+
+/* ================= Status 1: Scan - E-Mails finden (Punkte erscheinen) ================= */
+function updateScan(now){
+  if (phase !== PHASE_SCAN || appearFinished) return;
+  const elapsed = now - cycleStart;
+  if (elapsed >= SCAN_DURATION){
+    for (let i = 0; i < TOTAL; i++){
+      if (!scanned[i]){
+        scanned[i] = true;
+        pointField.setColorAt(i, COLOR_FLASH);
+        animateColor(i, COLOR_FLASH, COLOR_GRAY, 0.3);
+      }
+      setInstanceOrbiting(i, randomPositions[i], 1, timeNow - cycleStart);
+    }
+    pointField.instanceMatrix.needsUpdate = true;
+    appearFinished = true;
+    return;
+  }
+  for (let i = 0; i < TOTAL; i++){
+    const delay = (i / TOTAL) * (SCAN_DURATION - POP_DURATION); // letztes Aufpoppen endet exakt am Scan-Ende
+    const local = (elapsed - delay) / POP_DURATION;
+    if (local <= 0) continue;
+    if (!scanned[i]){
+      scanned[i] = true;
+      pointField.setColorAt(i, COLOR_FLASH);
+      animateColor(i, COLOR_FLASH, COLOR_GRAY, 0.3);
+    }
+    setInstanceOrbiting(i, randomPositions[i], easeOutBack(Math.min(local, 1)), timeNow - cycleStart);
+  }
+  pointField.instanceMatrix.needsUpdate = true;
+}
+
+/* ================= Status 2: Download - Punkte werden random reingezogen ================= */
+function updateDownloads(now){
+  if (phase !== PHASE_DOWNLOAD) return;
+  const kMax = Math.min(TOTAL, Math.floor((now - downloadStart) * FILES_PER_SECOND) + 1);
+  for (let k = 0; k < kMax; k++){
+    const idx = downloadOrder[k];
+    if (pullStart[idx] < 0){
+      pullStart[idx] = downloadStart + k / FILES_PER_SECOND;
+      pointField.setColorAt(idx, COLOR_FLASH);           // Blitz
+      animateColor(idx, COLOR_FLASH, COLOR_GREEN, 0.35); // -> Gruen
+    }
+  }
+  downloadedCount = kMax;
+}
+
+/* ================= Positionen der Punkte jeden Frame ================= */
+function updatePointTransforms(now){
+  if (phase === PHASE_IDLE || phase === PHASE_SCAN) return; // IDLE: Punkte versteckt; Scan steuert eigene Matrizen
+  for (let i = 0; i < TOTAL; i++){
+    if (phase === PHASE_DOWNLOAD){
+      const s = pullStart[i];
+      if (s < 0){ setInstanceOrbiting(i, randomPositions[i], 1, timeNow - cycleStart); continue; }
+      const t = (now - s) / PULL_DURATION;
+      if (t >= 1){
+        if (!impactDone[i]){
+          impactDone[i] = true;
+          spawnImpactWave(timeNow, randomPositions[i]); // Impact-Welle beim Einsaugen
+        }
+        setInstance(i, CENTER, 0);
+        continue;
+      }
+      const e = easeInCubic(t);
+      // Vom (weiter umlaufenden) Punkt aus spiralfoermig in den Core
+      dummy.position.copy(orbitPosition(i, randomPositions[i], timeNow - cycleStart)).multiplyScalar(1 - e);
+      dummy.scale.setScalar(1 - e * 0.95);
+      dummy.updateMatrix();
+      pointField.setMatrixAt(i, dummy.matrix);
+    } else {
+      // PROCESS / EXPLODE / COMPLETE
+      const d = explodeDelay[i];
+      const t = (now - explodeStart - d) / EXPLODE_DURATION;
+      if (t <= 0){ setInstance(i, CENTER, 0); continue; }
+      if (t >= 1){ setInstance(i, perfectPositions[i], 1); continue; } // sortiert = starr
+      const e = easeOutCubic(t);
+      dummy.position.copy(perfectPositions[i]).multiplyScalar(e);
+      dummy.scale.setScalar(Math.max(0.02, easeOutBack(t)));
+      dummy.updateMatrix();
+      pointField.setMatrixAt(i, dummy.matrix);
+    }
+  }
+  pointField.instanceMatrix.needsUpdate = true;
+}
+
+/* ================= Farbuebergaenge ================= */
+const colorAnims = new Map(); // index -> { t0, dur, from, to }
+function animateColor(i, from, to, dur){
+  colorAnims.set(i, { t0: timeNow, dur, from, to });
+}
+function updateColorAnims(now){
+  if (!colorAnims.size) return;
+  for (const [i, a] of colorAnims){
+    const t = (now - a.t0) / a.dur;
+    if (t >= 1){
+      pointField.setColorAt(i, a.to);
+      colorAnims.delete(i);
+    } else {
+      pointField.setColorAt(i, new THREE.Color().copy(a.from).lerp(a.to, t));
+    }
+  }
+  pointField.instanceColor.needsUpdate = true;
+}
+
+/* ================= Status 3: Explosion in die perfekte Kugel ================= */
+let shockwave = null;
+function initExplosion(){
+  if (explodeInitialized) return;
+  explodeInitialized = true;
+  for (let i = 0; i < TOTAL; i++){
+    explodeDelay[i] = Math.random() * 0.3;
+    animateColor(i, COLOR_GREEN, failFlags[i] ? COLOR_FAIL : COLOR_CYAN, 1.0); // Gruen -> Eisblau (Fehler: Rot)
+  }
+  // Expansions-Schockwelle
+  shockwave = new THREE.Mesh(
+    new THREE.SphereGeometry(1, 32, 32),
+    new THREE.MeshBasicMaterial({
+      color: new THREE.Color(0x3aa8ff).multiplyScalar(2),
+      transparent: true,
+      opacity: 0.7,
+      wireframe: true,
+      depthWrite: false
+    })
+  );
+  shockwave.frustumCulled = false;
+  scene.add(shockwave);
+}
+function updateShockwave(now){
+  if (!shockwave) return;
+  const t = (now - explodeStart) / 1.4;
+  if (t >= 1){
+    scene.remove(shockwave);
+    shockwave.geometry.dispose();
+    shockwave.material.dispose();
+    shockwave = null;
+  } else {
+    shockwave.scale.setScalar(1 + t * 7);
+    shockwave.material.opacity = 0.7 * (1 - t);
+  }
+}
+
+/* ================= Core pulsierend (E-Mails werden verarbeitet) ================= */
+function updateCore(now){
+  coreMat.uniforms.uTime.value = now;
+  if (phase === PHASE_PROCESS){
+    // Energie-Puls: weicher Anlauf UND weiches Ausklingen (kein Abreissen am Ende)
+    const tt = now - processStart;
+    const fadeIn  = Math.min(1, tt / 0.8);
+    const fadeOut = Math.min(1, (PROCESS_DURATION - tt) / 0.8);
+    const amp = Math.min(fadeIn, fadeOut);
+    const p = amp * (Math.sin(tt * 2.6) + 1) / 2;
+    core.scale.setScalar(1 + 0.12 * p);
+    coreMat.uniforms.uGlow.value = coreGlow * (1 + 0.35 * p);
+    coreLight.intensity = CORE_LIGHT_BASE * coreGlow + CORE_LIGHT_PULSE * p;
+  } else {
+    core.scale.setScalar(1);
+    coreMat.uniforms.uGlow.value = coreGlow;
+    coreLight.intensity = CORE_LIGHT_BASE * coreGlow;
+  }
+}
+
+/* ================= Partikel waehrend der Verarbeitung ================= */
+function updateProcessingParticles(now){
+  // Partikel-Sturm entfernt: Verarbeitung wird durch OCR-Band + Analyse-Ringe dargestellt
+}
+
+/* ================= Puls-Ringe (Energie-Wellen nach aussen) ================= */
+const pulseRings = [];
+let lastPulseRing = 0;
+function spawnPulseRing(now){
+  const pts = [];
+  for (let i = 0; i <= 64; i++){
+    const a = (i / 64) * Math.PI * 2;
+    pts.push(new THREE.Vector3(Math.cos(a), 0, Math.sin(a)));
+  }
+  const line = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints(pts),
+    new THREE.LineBasicMaterial({
+      color: new THREE.Color(0x00c8ff).multiplyScalar(1.8),
+      transparent: true,
+      opacity: 0.7,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    })
+  );
+  line.frustumCulled = false;
+  scene.add(line);
+  pulseRings.push({ line, t0: now });
+}
+function updatePulseRings(now){
+  if (phase === PHASE_PROCESS){
+    if (now - lastPulseRing > 2.2 && pulseRings.length < 3){
+      spawnPulseRing(now);
+      lastPulseRing = now;
+    }
+  }
+  for (let i = pulseRings.length - 1; i >= 0; i--){
+    const r = pulseRings[i];
+    const t = (now - r.t0) / 1.6;
+    if (t >= 1){
+      scene.remove(r.line);
+      r.line.geometry.dispose();
+      r.line.material.dispose();
+      pulseRings.splice(i, 1);
+      continue;
+    }
+    r.line.scale.setScalar(1 + t * 4.5);
+    r.line.material.opacity = 0.7 * (1 - t);
+  }
+}
+
+/* ================= OCR-Scan-Band (sweep ueber den Core) ================= */
+const scanBand = (() => {
+  const pts = [];
+  for (let i = 0; i <= 64; i++){
+    const a = (i / 64) * Math.PI * 2;
+    pts.push(new THREE.Vector3(Math.cos(a), 0, Math.sin(a)));
+  }
+  const line = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints(pts),
+    new THREE.LineBasicMaterial({
+      color: new THREE.Color(0x7fd0ff).multiplyScalar(2),
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    })
+  );
+  line.frustumCulled = false;
+  line.scale.setScalar(1.25); // Ring knapp um den Core
+  scene.add(line);
+  return line;
+})();
+function updateScanBand(now){
+  const target = phase === PHASE_PROCESS ? 0.9 : 0;
+  scanBand.material.opacity += (target - scanBand.material.opacity) * 0.15;
+  if (phase === PHASE_PROCESS){
+    scanBand.position.y = Math.sin((now - processStart) * 1.9) * 1.15; // OCR-Sweep
+  } else {
+    scanBand.position.y = 0;
+  }
+}
+
+/* ================= Analyse-Ringe (nur waehrend der Verarbeitung) ================= */
+function updateAnalyzers(dt){
+  const target = phase === PHASE_PROCESS ? 0.55 : 0;
+  analyzer1.material.opacity += (target - analyzer1.material.opacity) * 0.12;
+  analyzer2.material.opacity += (target - analyzer2.material.opacity) * 0.12;
+  const spd = phase === PHASE_PROCESS ? 1.4 : 0;
+  analyzer1.rotation.y += dt * spd;
+  analyzer2.rotation.y -= dt * spd * 1.3;
+}
+
+/* ================= Impact-Wellen (jede eingesaugte Kugel -> Welle auf dem Core) ================= */
+const IMPACT_POOL = 25;
+const impactWaveGeo = (() => {
+  const pts = [];
+  for (let i = 0; i <= 24; i++){
+    const a = (i / 24) * Math.PI * 2;
+    pts.push(new THREE.Vector3(Math.cos(a), 0, Math.sin(a)));
+  }
+  return new THREE.BufferGeometry().setFromPoints(pts);
+})();
+const impactWaveBaseMat = new THREE.LineBasicMaterial({
+  color: new THREE.Color(0x9fffee).multiplyScalar(2.5),
+  transparent: true,
+  opacity: 0,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+});
+const upVec = new THREE.Vector3(0, 1, 0);
+const impactWaves = [];
+for (let i = 0; i < IMPACT_POOL; i++){
+  const line = new THREE.Line(impactWaveGeo, impactWaveBaseMat.clone());
+  line.frustumCulled = false;
+  line.visible = false;
+  scene.add(line);
+  impactWaves.push({ line, active: false, t0: 0 });
+}
+function spawnImpactWave(now, dir){
+  const w = impactWaves.find(w => !w.active);
+  if (!w) return;
+  const d = dir.clone().normalize();
+  w.active = true;
+  w.t0 = now;
+  w.line.visible = true;
+  if (Math.abs(d.y) > 0.99){
+    w.line.quaternion.identity();
+    w.line.rotation.x = d.y > 0 ? 0 : Math.PI;
+  } else {
+    w.line.quaternion.setFromUnitVectors(upVec, d);
+  }
+  w.line.scale.setScalar(1.05);
+  w.line.material.opacity = 0.85;
+}
+function updateImpactWaves(now){
+  for (const w of impactWaves){
+    if (!w.active) continue;
+    const t = (now - w.t0) / 0.4;
+    if (t >= 1){
+      w.active = false;
+      w.line.visible = false;
+      w.line.material.opacity = 0;
+      continue;
+    }
+    w.line.scale.setScalar(1.05 + t * 0.95);
+    w.line.material.opacity = 0.85 * (1 - t);
+  }
+}
+
+/* ================= Hover-Tooltips ================= */
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+let px = 0, py = 0, hasPointer = false;
+addEventListener('pointermove', (e) => {
+  px = e.clientX; py = e.clientY;
+  hasPointer = true;
+  pointer.x = (e.clientX / innerWidth) * 2 - 1;
+  pointer.y = -(e.clientY / innerHeight) * 2 + 1;
+});
+const tooltipEl = document.getElementById('tooltip');
+function hoverEnabled(now){
+  if (phase === PHASE_SCAN) return appearFinished;
+  if (phase === PHASE_COMPLETE) return true;
+  return false;
+}
+function updateHover(now){
+  if (!hasPointer || !hoverEnabled(now)){ tooltipEl.style.display = 'none'; return; }
+  raycaster.setFromCamera(pointer, camera);
+  const hits = raycaster.intersectObject(pointField, false);
+  if (hits.length && hits[0].instanceId !== undefined){
+    const id = hits[0].instanceId;
+    const meta = fileMeta[id];
+    let status = 'NICHT RUNTERGELADEN', col = '#4a6a8a';
+    if (phase === PHASE_COMPLETE){
+      if (failFlags[id]){ status = 'VERARBEITUNGSFEHLER'; col = '#ff3355'; }
+      else { status = 'SORTIERT'; col = '#9fffee'; }
+    }
+    tooltipEl.innerHTML =
+      '<div class="tt-name">' + meta.name + '</div>' +
+      '<div class="tt-meta"><span style="color:' + col + '">&#9679; ' + status + '</span> &nbsp;|&nbsp; ' + meta.size + ' MB</div>';
+    tooltipEl.style.display = 'block';
+    tooltipEl.style.left = Math.min(px + 16, innerWidth  - tooltipEl.offsetWidth  - 10) + 'px';
+    tooltipEl.style.top  = Math.min(py + 18, innerHeight - tooltipEl.offsetHeight - 10) + 'px';
+    document.body.style.cursor = 'pointer';
+  } else {
+    tooltipEl.style.display = 'none';
+    document.body.style.cursor = 'default';
+  }
+}
+
+/* ================= HUD ================= */
+const progressText = document.getElementById('progressText');
+const progressBar  = document.getElementById('progressBar').firstElementChild;
+const stateText    = document.getElementById('stateText');
+const elapsedText  = document.getElementById('elapsedText');
+const rateText     = document.getElementById('rateText');
+const rateWindow = [];
+function updateHUD(now){
+  const elapsed = now - cycleStart;
+
+  // Waehrend des Scans werden die E-Mails "gefunden" (Zaehler laeuft hoch)
+  if (phase === PHASE_SCAN){
+    const sp = Math.max(0, (now - cycleStart) / SCAN_DURATION);
+    foundCount = Math.min(TOTAL, Math.floor(sp * TOTAL) + 1);
+  }
+
+  let dispCount = 0;
+  if (phase === PHASE_SCAN) dispCount = foundCount;
+  else dispCount = downloadedCount;
+
+  progressText.textContent = phase === PHASE_IDLE ? '0 / ?' : dispCount + ' / ' + TOTAL;
+  progressBar.style.width = (phase === PHASE_IDLE ? 0 : (dispCount / TOTAL * 100)).toFixed(2) + '%';
+  elapsedText.textContent = phase === PHASE_IDLE ? '0.0s' : elapsed.toFixed(1) + 's';
+
+  let state = 'BEREIT — DRÜCKE DOWNLOAD';
+  if (phase === PHASE_SCAN) state = 'SCANNING — FINDE E-MAILS\u2026';
+  else if (phase === PHASE_DOWNLOAD) state = 'DOWNLOADING — ' + downloadedCount + ' / ' + TOTAL;
+  else if (phase === PHASE_PROCESS){
+    const proc = Math.min(1, (now - processStart) / PROCESS_DURATION);
+    let step = 'OCR-ERKENNUNG';
+    if (proc > 0.33) step = 'TEXT-PARSING';
+    if (proc > 0.66) step = 'METADATEN-INDEXIERUNG';
+    state = step + ' \u2014 ' + Math.min(99, Math.floor(proc * 100)) + '%';
+  }
+  else if (phase === PHASE_PAUSE) state = "VERARBEITUNG FERTIG — GLEICH GEHT'S LOS";
+  else if (phase === PHASE_EXPLODE) state = 'SORTIERT — PERFEKTE KUGEL';
+  else if (phase === PHASE_COMPLETE) state = 'FERTIG — ALLE E-MAILS VERARBEITET (' + failCount + ' FEHLER)';
+  stateText.textContent = state;
+  stateText.classList.toggle('blink', phase === PHASE_DOWNLOAD || phase === PHASE_PROCESS);
+
+  // Download-Button: aktiv nur im Standby/nach Abschluss
+  const running = phase >= PHASE_SCAN && phase < PHASE_COMPLETE;
+  restartBtn.disabled = running;
+  restartBtn.textContent = running ? 'LÄUFT\u2026' : '\u25B6 DOWNLOAD';
+
+  if (phase === PHASE_DOWNLOAD){
+    rateWindow.push({ t: now, c: downloadedCount });
+    while (rateWindow.length > 1 && rateWindow[0].t < now - 2) rateWindow.shift();
+    if (rateWindow.length > 1){
+      const a = rateWindow[0], b = rateWindow[rateWindow.length - 1];
+      if (b.t - a.t > 0.05) rateText.textContent = ((b.c - a.c) / (b.t - a.t)).toFixed(1);
+    }
+  }
+}
+
+/* ================= Regler ================= */
+let coreGlow = 1.59;  // Multiplikator fuer Core-Gluehen (live)
+let pointGlow = 0.9;  // Multiplikator fuer Punkt-Helligkeit (live)
+function bindSlider(input, label, fn){
+  input.addEventListener('input', () => {
+    const v = parseFloat(input.value);
+    label.textContent = v.toFixed(2);
+    fn(v);
+  });
+}
+bindSlider(document.getElementById('ctlStrength'),  document.getElementById('valStrength'),  v => { bloomPass.strength = v; });
+bindSlider(document.getElementById('ctlRadius'),    document.getElementById('valRadius'),    v => { bloomPass.radius = v; });
+bindSlider(document.getElementById('ctlThreshold'), document.getElementById('valThreshold'), v => { bloomPass.threshold = v; });
+bindSlider(document.getElementById('ctlExposure'),  document.getElementById('valExposure'),  v => { renderer.toneMappingExposure = v; });
+bindSlider(document.getElementById('ctlCoreGlow'),  document.getElementById('valCoreGlow'),  v => { coreGlow = v; });
+bindSlider(document.getElementById('ctlPointGlow'), document.getElementById('valPointGlow'), v => { pointGlow = v; pointMat.uniforms.uGlow.value = v; });
+document.getElementById('controlsToggle').addEventListener('click', () => {
+  const body = document.getElementById('controlsBody');
+  const hidden = body.style.display === 'none';
+  body.style.display = hidden ? 'block' : 'none';
+  document.getElementById('controlsToggle').textContent = hidden ? '\u2212' : '+';
+});
+
+/* ================= Download-Button ================= */
+const restartBtn = document.getElementById('restartBtn');
+restartBtn.addEventListener('click', () => {
+  if (phase !== PHASE_IDLE && phase !== PHASE_COMPLETE) return; // laeuft schon
+  scatterPositions();
+  pickFails();
+  downloadOrder = shuffle([...Array(TOTAL).keys()]);
+  pullStart.fill(-1);
+  explodeDelay.fill(0);
+  scanned.fill(false);
+  impactDone.fill(false);
+  explodeInitialized = false;
+  if (shockwave){
+    scene.remove(shockwave);
+    shockwave.geometry.dispose();
+    shockwave.material.dispose();
+    shockwave = null;
+  }
+  for (let i = 0; i < pulseRings.length; i++){
+    scene.remove(pulseRings[i].line);
+    pulseRings[i].line.geometry.dispose();
+    pulseRings[i].line.material.dispose();
+  }
+  pulseRings.length = 0;
+  lastPulseRing = 0;
+  colorAnims.clear();
+  for (let i = 0; i < TOTAL; i++){
+    pointField.setColorAt(i, COLOR_GRAY);
+    setInstance(i, randomPositions[i], 0);
+  }
+  pointField.instanceColor.needsUpdate = true;
+  pointField.instanceMatrix.needsUpdate = true;
+  particles.length = 0;
+  freeSlots.length = 0;
+  slotCount = 0;
+  pGeo.setDrawRange(0, 0);
+  rateWindow.length = 0;
+  downloadedCount = 0;
+  foundCount = 0;
+  appearFinished = false;
+  phase = PHASE_SCAN;
+  resetTimers();
+  core.scale.setScalar(1);
+  coreMat.uniforms.uGlow.value = coreGlow;
+  coreLight.intensity = CORE_LIGHT_BASE * coreGlow;
+});
+
+/* ================= Hauptschleife ================= */
+let lastFrame = performance.now();
+function animate(nowMs){
+  requestAnimationFrame(animate);
+  timeNow = nowMs / 1000;
+  const dt = Math.min((nowMs - lastFrame) / 1000, 0.1);
+  lastFrame = nowMs;
+
+  if (phase !== PHASE_IDLE) phase = computePhase(timeNow);
+
+  updateScan(timeNow);
+  updateDownloads(timeNow);
+  if (phase === PHASE_EXPLODE || phase === PHASE_COMPLETE) initExplosion();
+  updatePointTransforms(timeNow);
+  updateColorAnims(timeNow);
+  updateCore(timeNow);
+  updateProcessingParticles(timeNow);
+  updatePulseRings(timeNow);
+  updateScanBand(timeNow);
+  updateAnalyzers(dt);
+  updateFloatTexts(timeNow);
+  updateImpactWaves(timeNow);
+  updateParticles(dt);
+  updateShockwave(timeNow);
+  updateHover(timeNow);
+  updateHUD(timeNow);
+
+  stars.rotation.y += dt * 0.008;
+  holoOuter.rotation.y += dt * 0.03;
+  holoOuter.rotation.x += dt * 0.012;
+  holoInner.rotation.y += dt * 0.12;
+  holoInner.rotation.x += dt * 0.04;
+  orbit1.rotation.y += dt * 0.4;
+  orbit2.rotation.y -= dt * 0.3;
+  orbit3.rotation.y += dt * 0.25;
+  shieldPanel.rotation.y -= dt * 0.3; // gegenlaeufig -> Facetten-Schimmer
+  shieldPanel.rotation.x += dt * 0.08;
+  controls.update();
+  composer.render();
+}
+requestAnimationFrame(animate);
+
+/* ================= Resize ================= */
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  composer.setSize(innerWidth, innerHeight);
+  bloomPass.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
+
