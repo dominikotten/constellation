@@ -208,7 +208,7 @@ core.add(coreLight);
 
 /* ================= Positions ================= */
 const TOTAL = 588;
-const SHELL_RADIUS = 5;
+const SHELL_RADIUS = 5.5;
 const CENTER = new THREE.Vector3(0, 0, 0);
 
 function fibonacciSphere(samples, radius){
@@ -717,7 +717,7 @@ const PULL_DURATION   = 0.5;   // duration of pulling one point into the core
 const FILES_PER_SECOND = 45;   // files are pulled in randomly
 const PROCESS_DURATION = 10.0; // core pulses -> e-mails are processed
 const PAUSE_DURATION  = 1.0;   // pulse stops, then explosion
-const EXPLODE_DURATION = 1.2;  // explosion into the perfect sphere
+const EXPLODE_DURATION = 1.8;  // slow, wavy emergence of the perfect sphere
 
 let timeNow = 0;
 let phase = PHASE_IDLE;
@@ -732,12 +732,12 @@ const UPLOAD_TIME = 1.0;      // green: uploading
 const ARRIVE_TIME = 0.5;      // white flash + burst at completion
 const DOCS_SPHERE_DUR = COMMENT_TIME + UPLOAD_TIME + ARRIVE_TIME;
 const DOCS_PER_SECOND = 1 / DOCS_SPHERE_DUR;
-const DOC_CAM_RADIUS = 7.5;   // camera orbits outside the shell, ~2.5 behind the active sphere
+const DOC_CAM_RADIUS = 8.0;   // camera orbits outside the shell, ~2.5 behind the active sphere
 const DOC_ARRIVE_RATE = 5;    // camera glide speed (1/s)
 const DOC_BLUE  = new THREE.Color(0x3d8bff).multiplyScalar(4);
 const DOC_GREEN = new THREE.Color(0x00ff88).multiplyScalar(4);
 const DOC_FLASH = new THREE.Color(0xd0ffee).multiplyScalar(5);
-const docUp = new THREE.Vector3(0, 0.8, 0);
+const docUp = new THREE.Vector3(0, 0.55, 0);
 const docColTmp = new THREE.Color();
 const docHomePos = new THREE.Vector3(0, 3, 15);
 const docCamPos = new THREE.Vector3(0, 3, 15);   // smoothed camera position (camera rig)
@@ -767,7 +767,7 @@ function resetTimers(){
   processStart  = downloadStart + TOTAL / FILES_PER_SECOND + PULL_DURATION;
   pauseStart    = processStart + PROCESS_DURATION;
   explodeStart  = pauseStart + PAUSE_DURATION;
-  completeStart = explodeStart + EXPLODE_DURATION + 0.5;
+  completeStart = explodeStart + EXPLODE_DURATION + 1.1;
 }
 resetTimers();
 
@@ -862,7 +862,10 @@ function updatePointTransforms(now){
       if (t <= 0){ setInstance(i, CENTER, 0); continue; }
       if (t >= 1){ setInstance(i, perfectPositions[i], 1); continue; } // sorted = static
       const e = easeOutCubic(t);
+      // undulating emergence: sideways sway that decays while the sphere settles
+      const sway = Math.sin(t * Math.PI * 2) * (1 - e) * 0.5;
       dummy.position.copy(perfectPositions[i]).multiplyScalar(e);
+      dummy.position.addScaledVector(docSwayDir[i], sway);
       dummy.scale.setScalar(Math.max(0.02, easeOutBack(t)));
       dummy.updateMatrix();
       pointField.setMatrixAt(i, dummy.matrix);
@@ -892,11 +895,24 @@ function updateColorAnims(now){
 
 /* ================= Phase 3: Explosion into the perfect sphere ================= */
 let shockwave = null;
+// wavy formation helpers: a wave-front delay + a decaying sideways sway per sphere
+const docSwayDir = [];
+{
+  const up = new THREE.Vector3(0, 1, 0);
+  const right = new THREE.Vector3(1, 0, 0);
+  for (let i = 0; i < TOTAL; i++){
+    const d = perfectPositions[i].clone().normalize();
+    const perp = new THREE.Vector3().crossVectors(d, Math.abs(d.y) > 0.9 ? right : up).normalize();
+    docSwayDir.push(perp);
+  }
+}
+const docWaveDir = new THREE.Vector3(1, 0.35, 0.25).normalize();
 function initExplosion(){
   if (explodeInitialized) return;
   explodeInitialized = true;
   for (let i = 0; i < TOTAL; i++){
-    explodeDelay[i] = Math.random() * 0.3;
+    const dir = perfectPositions[i].clone().normalize();
+    explodeDelay[i] = (0.5 + 0.5 * docWaveDir.dot(dir)) * 0.6 + Math.random() * 0.15; // wave-front sweep
     animateColor(i, COLOR_GREEN, failFlags[i] ? COLOR_FAIL : COLOR_CYAN, 1.0); // green -> ice white (fail: red)
   }
   // expanding shockwave
@@ -915,7 +931,7 @@ function initExplosion(){
 }
 function updateShockwave(now){
   if (!shockwave) return;
-  const t = (now - explodeStart) / 1.4;
+  const t = (now - explodeStart) / 2.6;
   if (t >= 1){
     scene.remove(shockwave);
     shockwave.geometry.dispose();
@@ -1148,21 +1164,29 @@ scene.add(docConstLines);
 
 function makeDocLabel(text, col){
   const c = document.createElement('canvas');
-  c.width = 256; c.height = 48;
+  c.width = 256; c.height = 64;
   const ctx = c.getContext('2d');
-  ctx.font = 'bold 22px Consolas, "Courier New", monospace';
+  // dark backing panel so the tag stays readable against bloom/background
+  ctx.fillStyle = 'rgba(3, 8, 22, 0.85)';
+  ctx.beginPath();
+  ctx.roundRect(8, 8, 240, 48, 10);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(120, 180, 255, 0.45)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.font = 'bold 28px Consolas, "Courier New", monospace';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.shadowColor = 'rgba(0,180,255,0.9)'; ctx.shadowBlur = 8;
+  ctx.shadowColor = col; ctx.shadowBlur = 14;
   ctx.fillStyle = col;
-  ctx.fillText(text, 128, 24);
+  ctx.fillText(text, 128, 32);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
     map: tex,
     transparent: true, opacity: 0,
-    blending: THREE.AdditiveBlending, depthWrite: false
+    depthWrite: false
   }));
-  sprite.scale.set(1.9, 0.36, 1);
+  sprite.scale.set(2.1, 0.52, 1);
   sprite.frustumCulled = false;
   scene.add(sprite);
   return sprite;
@@ -1203,7 +1227,7 @@ scene.add(docRingProg);
 
 // small particle burst at each arrival (expanding from the sphere)
 const DOC_BURSTS = 16;
-const DOC_BURST_PART = 10;
+const DOC_BURST_PART = 22;
 function makeSoftPointTexture(){
   const c = document.createElement('canvas');
   c.width = 64; c.height = 64;
@@ -1225,7 +1249,7 @@ dbGeo.setAttribute('position', dbPos);
 dbGeo.setAttribute('color', dbCol);
 dbGeo.setDrawRange(0, 0);
 const docBurstMat = new THREE.PointsMaterial({
-  size: 0.16, map: makeSoftPointTexture(), alphaTest: 0.001,
+  size: 0.18, map: makeSoftPointTexture(), alphaTest: 0.001,
   vertexColors: true, transparent: true,
   blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false
 });
@@ -1249,7 +1273,7 @@ function spawnDocBurst(now, pos){
   for (let i = 0; i < DOC_BURST_PART; i++){
     const d = b.dirs[i].randomDirection();
     if (d.dot(toCam) > 0) d.reflect(toCam); // never fly toward the camera
-    b.speeds[i] = 1.5 + Math.random() * 2.5;
+    b.speeds[i] = 2.0 + Math.random() * 3.0;
   }
 }
 function updateDocBursts(now){
@@ -1257,7 +1281,7 @@ function updateDocBursts(now){
   for (let b = 0; b < DOC_BURSTS; b++){
     const burst = docBursts[b];
     if (!burst.active) continue;
-    const t = (now - burst.t0) / 0.55;
+    const t = (now - burst.t0) / 0.75;
     if (t >= 1){ burst.active = false; continue; }
     const fade = 1 - t;
     for (let i = 0; i < DOC_BURST_PART; i++){
@@ -1366,7 +1390,7 @@ function updateDocs(now, dt){
     } else {
       const e = Math.min(1, (tActive - COMMENT_TIME - UPLOAD_TIME) / ARRIVE_TIME);
       docRing.material.color.setRGB(0.95, 1, 0.92);
-      docRing.scale.setScalar(0.95 + e * 1.3);
+      docRing.scale.setScalar(0.95 + e * 3.2);
       ringOp = 0.9 * (1 - e);
       ringOpP = 0.95 * (1 - e);
     }
@@ -1409,9 +1433,9 @@ function updateDocs(now, dt){
       docColTmp.copy(DOC_BLUE).lerp(DOC_GREEN, g);
     } else {
       const e = (t - COMMENT_TIME - UPLOAD_TIME) / ARRIVE_TIME;
-      docColTmp.copy(DOC_GREEN).lerp(DOC_FLASH, Math.min(1, e * 1.4));
-      scale = 2.05 + e * 1.5; // charge up...
-      if (e > 0.6) scale = 2.95 * Math.max(0, (1 - e) / 0.4); // ...then shrink away smoothly
+      docColTmp.copy(DOC_GREEN).lerp(DOC_FLASH, Math.min(1, e * 2));
+      scale = 2.05 + e * 3.0; // inflate into a bright blob...
+      if (e > 0.72) scale = 0; // ...then pop into the burst
     }
     dummy.position.copy(perfectPositions[idx]);
     dummy.scale.setScalar(Math.max(0.0001, scale));
