@@ -135,6 +135,31 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
+/* =====================================================================
+   BRAIN / CONSTELLATION — CODE-PROTOKOLL
+   =====================================================================
+   GRUNDKONZEPT:
+   • JEDER PUNKT (eine Instanz der pointField-Mini-Kugeln) = EINE E-MAIL.
+     Insgesamt TOTAL = 588 Punkte = 588 E-Mails/Dokumente.
+   • Der Ablauf dokumentiert den Lebenszyklus der 588 E-Mails als Animation:
+
+       1) IDLE      – Standby: die Sternenwolke dreht sich langsam.
+       2) SCAN      – "E-Mails werden gefunden": die 588 Punkte erscheinen
+                      einzeln (mit Pop) und orbiten als Wolke um den Kern.
+       3) DOWNLOAD  – "E-Mails werden geladen": Punkte werden in zufälliger
+                      Reihenfolge spiralförmig in den Kern gesaugt.
+       4) PROCESS   – "E-Mails werden verarbeitet": der Kern pulsiert,
+                      Fachbegriffe (OCR, AES-256, ...) scramblen als
+                      Wort-Konstellation um den Kern herum.
+       5) PAUSE     – die Wörter werden sanft zurück in den Kern gezogen.
+       6) EXPLODE   – die 588 Punkte formen sich wellenförmig (Wellen-Delay
+                      + Sway) zur "perfekten Sphäre" (sortierte E-Mails).
+       7) COMPLETE  – fertig sortiert; der Button wechselt zu COMMENT & UPLOAD.
+       8) DOCS      – COMMENT & UPLOAD: die Kamera gleitet ruhig zu jeder
+                      Kugel (ein Dokument), blau = Kommentar, grün = Upload
+                      mit Fortschrittsring, dann 300ms-Fade zu Nichts.
+   ===================================================================== */
+
 /* ================= Renderer ================= */
 const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' });
 renderer.setSize(innerWidth, innerHeight);
@@ -207,6 +232,7 @@ const coreLight = new THREE.PointLight(0x00eaff, CORE_LIGHT_BASE, 30, 2);
 core.add(coreLight);
 
 /* ================= Positions ================= */
+// 588 Punkte = 588 E-Mails — ein Punkt ist genau eine Mail/Dokument.
 const TOTAL = 588;
 const SHELL_RADIUS = 5.5;
 const CENTER = new THREE.Vector3(0, 0, 0);
@@ -272,6 +298,7 @@ const pointMat = new THREE.ShaderMaterial({
   depthWrite: false,
   blending: THREE.AdditiveBlending
 });
+// pointField: 588 instanziierte Mini-Kugeln — JEDER PUNKT IST EINE E-MAIL.
 const pointField = new THREE.InstancedMesh(new THREE.SphereGeometry(0.12, 16, 16), pointMat, TOTAL);
 pointField.frustumCulled = false;
 const dummy = new THREE.Object3D();
@@ -540,6 +567,10 @@ const RING_CONFIG = [
   { radius: 2.7,  y: 0.8,   speed: -0.1 }
 ];
 const PER_RING = 16; // 4 rings x 16 = 64 labels
+// WORT-KONSTELLATION: 64 Fachbegriffe (OCR, AES-256, SHA-256, ...) fliegen während
+// der Verarbeitung um den Kern, scramblen zu anderen Begriffen und werden am Ende
+// (PAUSE) sanft wieder reingezogen. Jede "Schrift" ist ein Sprite mit Unterstrich
+// und einer Linie zum Kern.
 const floatTexts = [];
 let txtIdx = 0;
 for (let r = 0; r < RING_CONFIG.length; r++){
@@ -813,6 +844,9 @@ const chromaPass = new ShaderPass({
 composer.addPass(chromaPass);
 
 /* ================= Phasen & Timing ================= */
+// Ablauf-Protokoll des ganzen Lebenszyklus:
+// IDLE -> SCAN (finden) -> DOWNLOAD (laden) -> PROCESS (verarbeiten)
+//     -> PAUSE -> EXPLODE (perfekte Sphäre) -> COMPLETE -> DOCS (kommentieren/uploaden)
 const PHASE_IDLE = -1, PHASE_SCAN = 0, PHASE_DOWNLOAD = 1, PHASE_PROCESS = 2, PHASE_PAUSE = 3, PHASE_EXPLODE = 4, PHASE_COMPLETE = 5, PHASE_DOCS = 6;
 const SCAN_DURATION   = 2.5;   // finding e-mails (points appear)
 const POP_DURATION    = 0.18;  // single pop duration
@@ -890,6 +924,9 @@ function easeInCubic(t){ return t*t*t; }
 function easeOutCubic(t){ const u = 1 - t; return 1 - u*u*u; }
 
 /* ================= Phase 1: Scan - finding e-mails (points appear) ================= */
+// SCAN: Die 588 E-Mails werden "gefunden". Jeder Punkt poppt (easeOutBack) an
+// seiner zufälligen Orbit-Position auf und leuchtet kurz weiss auf, dann orbitet
+// die ganze Wolke langsam um den Kern.
 function updateScan(now){
   if (phase !== PHASE_SCAN || appearFinished) return;
   const elapsed = now - cycleStart;
@@ -921,6 +958,9 @@ function updateScan(now){
 }
 
 /* ================= Phase 2: Download - points are pulled in randomly ================= */
+// DOWNLOAD: Die E-Mails werden eine nach der anderen (FILES_PER_SECOND pro Sekunde)
+// in zufälliger Reihenfolge in den Kern gesaugt (Spirale + Impact-Welle beim Einschlag).
+// So "lädt" die Datei sichtbar: die Wolke leert sich in den Kern hinein.
 function updateDownloads(now){
   if (phase !== PHASE_DOWNLOAD) return;
   const kMax = Math.min(TOTAL, Math.floor((now - downloadStart) * FILES_PER_SECOND) + 1);
@@ -936,6 +976,9 @@ function updateDownloads(now){
 }
 
 /* ================= Per-frame point positions ================= */
+// Setzt JEDE Frame Position + Skalierung aller 588 Punkte, abhängig von der Phase:
+// DOWNLOAD = orbiten/einsaugen, PROCESS = im Kern, EXPLODE/COMPLETE = perfekte Sphäre.
+// (IDLE/SCAN/DOCS haben eigene Handler.)
 function updatePointTransforms(now){
   if (phase === PHASE_IDLE || phase === PHASE_SCAN || phase === PHASE_DOCS) return; // IDLE/DOCS handled separately
   for (let i = 0; i < TOTAL; i++){
@@ -996,6 +1039,8 @@ function updateColorAnims(now){
 }
 
 /* ================= Phase 3: Explosion into the perfect sphere ================= */
+// EXPLODE: Die 588 Punkte formen sich mit Wellen-Delay + seitlichem Sway zur
+// perfekten Sphäre (Radius SHELL_RADIUS). Ein expandierender Shockwave-Ring begleitet es.
 let shockwave = null;
 // wavy formation helpers: a wave-front delay + a decaying sideways sway per sphere
 const docSwayDir = [];
@@ -1338,6 +1383,12 @@ scene.add(docRingProg);
 
 function easeInOutCubic(t){ return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2; }
 
+/* ================= Comment & Upload (DOCS) ================= */
+// COMMENT & UPLOAD: Jede Kugel = EIN Dokument. Die Kamera gleitet ruhig zur
+// jeweils aktiven Kugel (Nearest-Neighbor-Reihenfolge = kurze, weiche Hops)
+// und hält still, während die Kugel blau "COMMENTING" pulsiert, dann grün
+// "UPLOADING" (mit Fortschrittsring), gefolgt von einem weissen Flash und
+// einem 300ms-Fade zu Nichts.
 function updateDocs(now, dt){
   if (phase !== PHASE_DOCS) return;
   docIndex = Math.min(TOTAL, Math.floor((now - docStart) * DOCS_PER_SECOND));
@@ -1475,6 +1526,8 @@ function updateDocs(now, dt){
 }
 
 /* ================= Hover-Tooltips ================= */
+// Mauszeiger über einem Punkt zeigt dessen Dateinamen (z.B. mail_0003.eml)
+// und den aktuellen Status (NOT DOWNLOADED / SORTED / PROCESSING FAIL).
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 let px = 0, py = 0, hasPointer = false;
@@ -1516,6 +1569,9 @@ function updateHover(now){
 }
 
 /* ================= HUD ================= */
+// Statusleiste (DOM): Fortschrittsbalken, Zähler "n / 588", Zustandstext
+// (SCANNING / DOWNLOADING / PROCESSING / SORTED / COMMENT & UPLOAD ...)
+// und die Download-Rate in Dateien pro Sekunde.
 const progressText = document.getElementById('progressText');
 const progressBar  = document.getElementById('progressBar').firstElementChild;
 const stateText    = document.getElementById('stateText');
@@ -1603,6 +1659,9 @@ document.getElementById('controlsToggle').addEventListener('click', () => {
 });
 
 /* ================= Download-Button ================= */
+// Der eine grosse Button steuert den gesamten Ablauf:
+//   DOWNLOAD (Start des Zyklus) -> nach dem Sortieren: COMMENT & UPLOAD
+//   -> nach dem Upload: RESTART (neuer Zyklus).
 const restartBtn = document.getElementById('restartBtn');
 restartBtn.addEventListener('click', () => {
   // Comment & Upload starten (Kugeln bleiben auf der sortierten Kugel)
@@ -1674,6 +1733,9 @@ restartBtn.addEventListener('click', () => {
 });
 
 /* ================= Main loop ================= */
+// Hauptschleife: berechnet die aktuelle Phase (computePhase) und ruft alle
+// Update-Funktionen in fester Reihenfolge auf (Scan, Download, Explosion,
+// Kern, Wörter, HUD, ...), bevor der Frame gerendert wird.
 let lastFrame = performance.now();
 function animate(nowMs){
   requestAnimationFrame(animate);
