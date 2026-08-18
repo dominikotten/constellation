@@ -726,16 +726,19 @@ let appearFinished = false;
 let downloadedCount = 0;
 let foundCount = 0;
 let explodeInitialized = false;
-// Comment & Upload (camera space-journey to each sphere)
-const WARP_TIME = 2.5;          // camera flight duration per sphere
-const ARRIVE_TIME = 0.6;        // 0.2 comment + 0.2 upload + 0.2 explode
-const DOCS_SPHERE_DUR = WARP_TIME + ARRIVE_TIME;
+// Comment & Upload (static camera, spheres fly toward it like a space journey)
+const DOC_CAM_POS = new THREE.Vector3(0, 0.6, 3.0); // camera stays inside the shell
+const FLY_TIME = 2.0;         // a sphere flies from the shell toward the camera
+const ARRIVE_TIME = 0.5;      // explosion at close range
+const DOCS_SPHERE_DUR = FLY_TIME + ARRIVE_TIME;
 const DOCS_PER_SECOND = 1 / DOCS_SPHERE_DUR;
 const DOC_BLUE  = new THREE.Color(0x3d8bff).multiplyScalar(4);
 const DOC_GREEN = new THREE.Color(0x00ff88).multiplyScalar(4);
 const DOC_FLASH = new THREE.Color(0xd0ffee).multiplyScalar(5);
 const docHomePos = new THREE.Vector3(0, 3, 15);
-const bezTmp = new THREE.Vector3();
+const tmpDir = new THREE.Vector3();
+const docActivePos = new THREE.Vector3();
+const docUp = new THREE.Vector3(0, 0.8, 0);
 let docIndex = 0;
 let docStart = 0;
 let docsFinished = false;
@@ -1181,6 +1184,25 @@ function docFlightControl(from, to){
   return new THREE.Vector3().addVectors(from, to).multiplyScalar(0.25);
 }
 
+function docSpherePos(idx, t, out){
+  // current position of sphere idx during its journey toward the camera
+  if (t <= 0){ out.copy(perfectPositions[idx]); return; }
+  tmpDir.copy(perfectPositions[idx]).sub(DOC_CAM_POS).normalize();
+  const nx = DOC_CAM_POS.x + tmpDir.x * 0.8;
+  const ny = DOC_CAM_POS.y + tmpDir.y * 0.8;
+  const nz = DOC_CAM_POS.z + tmpDir.z * 0.8;
+  if (t < FLY_TIME){
+    const f = easeInOutCubic(t / FLY_TIME);
+    out.set(
+      perfectPositions[idx].x + (nx - perfectPositions[idx].x) * f,
+      perfectPositions[idx].y + (ny - perfectPositions[idx].y) * f,
+      perfectPositions[idx].z + (nz - perfectPositions[idx].z) * f
+    );
+  } else {
+    out.set(nx, ny, nz);
+  }
+}
+
 function updateDocs(now){
   if (phase !== PHASE_DOCS) return;
   docIndex = Math.min(TOTAL, Math.floor((now - docStart) * DOCS_PER_SECOND));
@@ -1191,46 +1213,42 @@ function updateDocs(now){
   const target = docOrder[active];
   const tActive = now - (docStart + active / DOCS_PER_SECOND);
 
-  // --- Camera: space journey ---
+  // --- Camera: static, looks at the incoming sphere ---
   if (docsFinished){
     const returnT = Math.min(1, (now - (docStart + (TOTAL - 1) / DOCS_PER_SECOND + DOCS_SPHERE_DUR)) / 1.6);
-    camera.position.lerpVectors(docViewPos[active], docHomePos, easeOutCubic(returnT));
+    camera.position.lerpVectors(DOC_CAM_POS, docHomePos, easeOutCubic(returnT));
     camera.lookAt(0, 0, 0);
     if (returnT >= 1) controls.enabled = true;
-  } else if (tActive < WARP_TIME){
-    const f = easeInOutCubic(tActive / WARP_TIME);
-    const from = active === 0 ? docHomePos : docViewPos[active - 1];
-    const to = docViewPos[active];
-    docBezier(from, docFlightControl(from, to), to, f, camera.position);
-    camera.lookAt(perfectPositions[target]);
   } else {
-    camera.position.copy(docViewPos[active]);
-    camera.lookAt(perfectPositions[target]);
+    camera.position.copy(DOC_CAM_POS);
+    docSpherePos(target, tActive, tmpDir);
+    camera.lookAt(tmpDir);
   }
 
-  // --- Labels + mini-constellation while arriving ---
-  const inArrival = tActive >= WARP_TIME && tActive < DOCS_SPHERE_DUR;
-  if (inArrival){
-    const i = active;
-    const ta = tActive - WARP_TIME;
-    const sub = ARRIVE_TIME / 3;
-    const activePos = perfectPositions[target];
+  // --- Labels + mini-constellation while the sphere flies in ---
+  const inFlight = tActive >= 0 && tActive < DOCS_SPHERE_DUR;
+  if (inFlight){
+    const i = target;
+    const ta = tActive;
+    docSpherePos(i, ta, docActivePos);
+    const sub = FLY_TIME / 2; // blue (comment) first half, green (upload) second half
     if (ta < sub){
       docLabelComment.material.opacity += (0.95 - docLabelComment.material.opacity) * 0.25;
       docLabelUpload.material.opacity  += (0    - docLabelUpload.material.opacity)  * 0.25;
-    } else if (ta < 2 * sub){
+    } else if (ta < FLY_TIME){
       docLabelComment.material.opacity += (0    - docLabelComment.material.opacity) * 0.25;
       docLabelUpload.material.opacity  += (0.95 - docLabelUpload.material.opacity)  * 0.25;
     } else {
       docLabelComment.material.opacity += (0 - docLabelComment.material.opacity) * 0.25;
       docLabelUpload.material.opacity  += (0 - docLabelUpload.material.opacity)  * 0.25;
     }
-    docLabelComment.position.copy(activePos).add(new THREE.Vector3(0, 0.75, 0));
-    docLabelUpload.position.copy(activePos).add(new THREE.Vector3(0, 0.75, 0));
+    docLabelComment.position.copy(docActivePos).add(docUp);
+    docLabelUpload.position.copy(docActivePos).add(docUp);
+    // mini-constellation: edges from the flying sphere to its nearest neighbors
     const cp = docConstPos.array;
     for (let e = 0; e < 3; e++){
-      const np = perfectPositions[nearest[target][e]];
-      cp[e*6]     = activePos.x; cp[e*6+1] = activePos.y; cp[e*6+2] = activePos.z;
+      const np = perfectPositions[nearest[i][e]];
+      cp[e*6]     = docActivePos.x; cp[e*6+1] = docActivePos.y; cp[e*6+2] = docActivePos.z;
       cp[e*6 + 3] = np.x; cp[e*6 + 4] = np.y; cp[e*6 + 5] = np.z;
     }
     docConstPos.needsUpdate = true;
@@ -1245,7 +1263,7 @@ function updateDocs(now){
     const idx = docOrder[i];
     const t = now - (docStart + i / DOCS_PER_SECOND);
     if (t < 0){
-      // not yet processed: faint "preparing" pulse
+      // not yet processed: stays on the shell, faint "preparing" pulse
       setInstance(idx, perfectPositions[idx], 1 + 0.03 * Math.sin(now * 2 + idx * 0.7));
       continue;
     }
@@ -1253,19 +1271,21 @@ function updateDocs(now){
       setInstance(idx, CENTER, 0); // done: gone
       continue;
     }
-    if (t < WARP_TIME){
-      // target sphere: brighter "being prepared" pulse
-      setInstance(idx, perfectPositions[idx], 1 + 0.07 * Math.sin(now * 4 + idx));
-      continue;
-    }
-    // arrival: grow + color
-    const ta = t - WARP_TIME;
+    // the sphere flies toward the camera, then explodes
+    docSpherePos(idx, t, tmpDir);
     let col;
-    if (ta < ARRIVE_TIME / 3) col = DOC_BLUE;
-    else if (ta < 2 * ARRIVE_TIME / 3) col = DOC_GREEN;
-    else col = DOC_FLASH;
-    dummy.position.copy(perfectPositions[idx]);
-    dummy.scale.setScalar(1 + 1.5 * Math.min(1, ta / ARRIVE_TIME));
+    let scale;
+    if (t < FLY_TIME){
+      const f = t / FLY_TIME;
+      scale = 1 + 2 * f;
+      col = f < 0.5 ? DOC_BLUE : DOC_GREEN;
+    } else {
+      const e = (t - FLY_TIME) / ARRIVE_TIME;
+      scale = 3 + e * 2;
+      col = DOC_FLASH;
+    }
+    dummy.position.copy(tmpDir);
+    dummy.scale.setScalar(scale);
     dummy.updateMatrix();
     pointField.setMatrixAt(i, dummy.matrix);
     pointField.setColorAt(idx, col);
