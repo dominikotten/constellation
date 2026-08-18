@@ -545,12 +545,11 @@ function updateFloatTexts(now){
   let target = 0;
   let s = 1;
   let fade = 1;
-  let expand = 1;
+  let appear = 1;
   if (inProcess){
     target = 0.95;
-    // words slowly emerge from the core and swell outward during processing
-    const p = Math.min(1, (now - processStart) / PROCESS_DURATION);
-    expand = 0.05 + 1.1 * easeInOutCubic(p); // start at the core center, draw outward
+    // words fade in gently at their constellation positions (smooth, not a hard spawn)
+    appear = easeInOutCubic(Math.min(1, (now - processStart) / 1.4));
   } else if (pulling){
     target = 0.95;
     // quickly pull the formulas into the core (first 0.35s of the pause)
@@ -569,24 +568,19 @@ function updateFloatTexts(now){
   for (const ft of floatTexts){
     // livelier orbit: second harmonic + stronger bob
     const a = ft.phase + ft.speed * now;
-    const r = ft.radius * expand;
-    const grow = 0.7 + 0.6 * expand; // words get bigger as they expand outward
+    const r = ft.radius;
     const px = Math.cos(a) * r + Math.sin(now * 0.7 + ft.phase) * 0.55;
     const py = (ft.y + Math.sin(now * ft.bobSpeed + ft.phase) * 0.75) * s;
     const pz = Math.sin(a) * r + Math.cos(now * 0.55 + ft.phase) * 0.55;
     ft.sprite.position.set(px, py, pz);
-    ft.underline.position.set(px, py - ft.base * 0.22 * grow * s, pz);
+    ft.underline.position.set(px, py - ft.base * 0.22 * s, pz);
     // leader line core -> label (moves along)
     const posArr = ft.line.geometry.attributes.position.array;
     posArr[3] = px; posArr[4] = py; posArr[5] = pz;
     ft.line.geometry.attributes.position.needsUpdate = true;
 
-    // bigger over time, scaled to the current size
-    ft.sprite.scale.set(ft.base * grow, ft.base * 0.25 * grow, 1);
-    ft.underline.scale.set(ft.base * 0.85 * grow, ft.base * 0.12 * grow, 1);
-
     const pulse = 0.75 + 0.25 * Math.sin(now * 1.6 + ft.phase * 3);
-    const o = target * fade * pulse;
+    const o = target * fade * pulse * appear;
     ft.sprite.material.opacity += (o - ft.sprite.material.opacity) * 0.09;
     ft.underline.material.opacity += (o * 0.8 - ft.underline.material.opacity) * 0.09;
     ft.line.material.opacity += (o * 0.6 - ft.line.material.opacity) * 0.09;
