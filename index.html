@@ -552,7 +552,7 @@ function updateFloatTexts(now){
     const pz = Math.sin(a) * ft.radius * s;
     ft.sprite.position.set(px, py, pz);
     ft.underline.position.set(px, py - ft.base * 0.22 * s, pz);
-    // Leader-Linie Core -> Label (zieht mit)
+    // leader line core -> label (moves along)
     const posArr = ft.line.geometry.attributes.position.array;
     posArr[3] = px; posArr[4] = py; posArr[5] = pz;
     ft.line.geometry.attributes.position.needsUpdate = true;

@@ -62,37 +62,37 @@
   <div class="panel jarvis-corner" id="progressPanel">
     <div id="progressText">0 / 588</div>
     <div id="progressBar"><div></div></div>
-    <div id="stateText">BEREIT &mdash; DR&Uuml;CKE DOWNLOAD</div>
+    <div id="stateText">READY &mdash; PRESS DOWNLOAD</div>
   </div>
   <button id="restartBtn">&#9654; DOWNLOAD</button>
   <div class="panel" id="statsPanel">
-    <div class="row">ZEIT&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span id="elapsedText">0.0s</span></div>
-    <div class="row">RATE&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span id="rateText">0.0</span> Dateien/s</div>
-    <div class="row">DATEIEN&nbsp;&nbsp;<span id="pointsText">588</span></div>
+    <div class="row">TIME&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span id="elapsedText">0.0s</span></div>
+    <div class="row">RATE&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span id="rateText">0.0</span> files/s</div>
+    <div class="row">FILES&nbsp;&nbsp;&nbsp;&nbsp;<span id="pointsText">588</span></div>
   </div>
   <div class="panel" id="legendPanel">
-    <div class="legend-item"><span class="dot" style="background:#4a6a8a;color:#4a6a8a"></span>NICHT RUNTERGELADEN</div>
-    <div class="legend-item"><span class="dot" style="background:#00fff2;color:#00fff2"></span>RUNTERGELADEN</div>
-    <div class="legend-item"><span class="dot" style="background:#9fffee;color:#9fffee"></span>SORTIERT</div>
-    <div class="legend-item"><span class="dot" style="background:#ff3355;color:#ff3355"></span>VERARBEITUNGSFEHLER</div>
+    <div class="legend-item"><span class="dot" style="background:#4a6a8a;color:#4a6a8a"></span>NOT DOWNLOADED</div>
+    <div class="legend-item"><span class="dot" style="background:#00fff2;color:#00fff2"></span>DOWNLOADED</div>
+    <div class="legend-item"><span class="dot" style="background:#9fffee;color:#9fffee"></span>SORTED</div>
+    <div class="legend-item"><span class="dot" style="background:#ff3355;color:#ff3355"></span>PROCESSING FAIL</div>
   </div>
   <div class="panel" id="controlsPanel">
     <div class="controls-header">
-      <span>REGLER</span>
-      <button id="controlsToggle" title="Ein-/Ausklappen">&minus;</button>
+      <span>CONTROLS</span>
+      <button id="controlsToggle" title="Collapse/Expand">&minus;</button>
     </div>
     <div id="controlsBody">
-      <label>BLOOM ST&Auml;RKE <span id="valStrength">0.30</span></label>
+      <label>BLOOM STRENGTH <span id="valStrength">0.30</span></label>
       <input type="range" id="ctlStrength" min="0" max="3" step="0.01" value="0.3">
       <label>BLOOM RADIUS <span id="valRadius">0.13</span></label>
       <input type="range" id="ctlRadius" min="0" max="2" step="0.01" value="0.13">
-      <label>BLOOM SCHWELLE <span id="valThreshold">0.60</span></label>
+      <label>BLOOM THRESHOLD <span id="valThreshold">0.60</span></label>
       <input type="range" id="ctlThreshold" min="0" max="1" step="0.01" value="0.6">
-      <label>HELLIGKEIT <span id="valExposure">1.19</span></label>
+      <label>BRIGHTNESS <span id="valExposure">1.19</span></label>
       <input type="range" id="ctlExposure" min="0.4" max="2" step="0.01" value="1.19">
       <label>CORE GLOW <span id="valCoreGlow">1.59</span></label>
       <input type="range" id="ctlCoreGlow" min="0.2" max="3" step="0.01" value="1.59">
-      <label>PUNKT GLOW <span id="valPointGlow">0.90</span></label>
+      <label>POINT GLOW <span id="valPointGlow">0.90</span></label>
       <input type="range" id="ctlPointGlow" min="0.2" max="3" step="0.01" value="0.9">
     </div>
   </div>
@@ -139,7 +139,7 @@ controls.enableDamping = true;
 controls.dampingFactor = 0.06;
 controls.autoRotate = true;
 controls.autoRotateSpeed = 0.6;
-controls.minDistance = 15; // nie naeher -> man sieht immer die ganze Kugel
+controls.minDistance = 15; // never closer -> the whole sphere is always visible
 controls.maxDistance = 24;
 
 /* ================= Environment + Lights ================= */
@@ -175,9 +175,9 @@ const coreMat = new THREE.ShaderMaterial({
     varying vec3 vN; varying vec3 vV; varying vec3 vPos;
     void main(){
       float fresnel = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 3.0);
-      // Facetten-Kanten hervorheben (Kristall-Look)
+      // highlight facet edges (crystal look)
       float edge = smoothstep(0.4, 0.5, fresnel);
-      // Energie-Adern: pulsierende Linien ueber die Oberflaeche
+      // energy veins: pulsing lines across the surface
       float veins = sin(vPos.x*8.0 + uTime*2.0) * sin(vPos.y*8.0 - uTime*1.5) * sin(vPos.z*8.0 + uTime);
       veins = smoothstep(0.85, 1.0, veins);
       vec3 col = uColor * (0.3 + fresnel*1.4 + edge*1.5 + veins*2.0) * uGlow;
@@ -190,7 +190,7 @@ scene.add(core);
 const coreLight = new THREE.PointLight(0x00eaff, CORE_LIGHT_BASE, 30, 2);
 core.add(coreLight);
 
-/* ================= Positionen ================= */
+/* ================= Positions ================= */
 const TOTAL = 588;
 const SHELL_RADIUS = 5;
 const CENTER = new THREE.Vector3(0, 0, 0);
@@ -206,22 +206,22 @@ function fibonacciSphere(samples, radius){
   }
   return pts;
 }
-// Perfekte Kugel = Endergebnis (sortiert)
+// Perfect sphere = final result (sorted)
 const perfectPositions = fibonacciSphere(TOTAL, SHELL_RADIUS);
 
-// Komplett zufaellige 3D-Wolke fuer den Start (nicht runtergeladen)
+// Fully random 3D cloud for the start (not downloaded)
 const randomPositions = [];
 function scatterPositions(){
   for (let i = 0; i < TOTAL; i++){
-    // Zufallspunkt gleichmaessig im Kugelvolumen verteilt (keine perfekte Schale!)
+    // random point evenly distributed in the sphere volume (no perfect shell!)
     const r = SHELL_RADIUS * (0.55 + 0.75 * Math.cbrt(Math.random()));
     randomPositions[i] = new THREE.Vector3().randomDirection().multiplyScalar(r);
   }
 }
 scatterPositions();
 
-/* ================= Punkte (InstancedMesh + Hologramm-Shader) ================= */
-// Shader mit Kugel-Schatten + Fresnel-Rand -> 3D-Hologramm statt flacher Platten
+/* ================= Points (InstancedMesh + hologram shader) ================= */
+// Shader with sphere shading + fresnel rim -> 3D hologram instead of flat plates
 const pointMat = new THREE.ShaderMaterial({
   uniforms: { uGlow: { value: 0.9 } },
   vertexShader: `
@@ -291,14 +291,14 @@ function orbitPosition(i, basePos, t){
 for (let i = 0; i < TOTAL; i++) setInstance(i, randomPositions[i], 0);
 pointField.instanceMatrix.needsUpdate = true;
 
-// 3 Status (Protoss-Cyan-Palette): STAHLBLAU = nicht runtergeladen | CYAN = runtergeladen | EISWEISS = sortiert | ROT = Fehler
+// 3 states (Protoss cyan palette): STEEL BLUE = not downloaded | CYAN = downloaded | ICE WHITE = sorted | RED = fail
 const COLOR_GRAY  = new THREE.Color(0x4a6a8a).multiplyScalar(2.0);
-const COLOR_GREEN = new THREE.Color(0x00fff2).multiplyScalar(4.0); // reines Cyan
+const COLOR_GREEN = new THREE.Color(0x00fff2).multiplyScalar(4.0); // pure cyan
 const COLOR_CYAN  = new THREE.Color(0x9fffee).multiplyScalar(4.5); // fast weisses Cyan
 const COLOR_FAIL  = new THREE.Color(0xff3355).multiplyScalar(4.0);
-const COLOR_FLASH = new THREE.Color(0xeafffb).multiplyScalar(3.0); // fast weisser Blitz
+const COLOR_FLASH = new THREE.Color(0xeafffb).multiplyScalar(3.0); // near-white flash
 
-// ~7% der Dateien scheitern bei der Verarbeitung -> rot am Ende
+// ~7% of files fail during processing -> red at the end
 const failFlags = new Array(TOTAL).fill(false);
 let failCount = 0;
 function pickFails(){
@@ -333,8 +333,8 @@ function makeHoloSphere(radius, opacity){
   scene.add(mesh);
   return mesh;
 }
-const holoOuter = makeHoloSphere(5.4, 0.10); // Hologramm-Kugel um das ganze System
-const holoInner = makeHoloSphere(1.4, 0.35);  // Hologramm-Frame um den Core
+const holoOuter = makeHoloSphere(5.4, 0.10); // hologram sphere around the whole system
+const holoInner = makeHoloSphere(1.4, 0.35);  // hologram frame around the core
 
 function makeCircleRing(radius, opacity){
   const pts = [];
@@ -356,18 +356,18 @@ function makeCircleRing(radius, opacity){
   scene.add(line);
   return line;
 }
-const orbit1 = makeCircleRing(2.4, 0.45); // Kreisel-Ringe (Jarvis-Orbits)
+const orbit1 = makeCircleRing(2.4, 0.45); // gyroscope rings (Jarvis orbits)
 const orbit2 = makeCircleRing(3.5, 0.3);
 const orbit3 = makeCircleRing(4.6, 0.2);
 orbit1.rotation.x = 1.25;
 orbit2.rotation.x = 1.65; orbit2.rotation.z = 0.7;
 orbit3.rotation.x = 0.85; orbit3.rotation.z = 1.15;
-// Enge Analyse-Ringe um den Core (nur waehrend der Verarbeitung sichtbar)
+// tight analyzer rings around the core (only visible during processing)
 const analyzer1 = makeCircleRing(1.45, 0);
 const analyzer2 = makeCircleRing(1.95, 0);
 analyzer1.rotation.x = 0.55;
 analyzer2.rotation.x = 1.15; analyzer2.rotation.z = 0.6;
-// Kristallin-Shield-Panel (gegenlaeufig zu den Ringen)
+// crystalline shield panel (counter-rotating to the rings)
 function makeShieldPanel(radius, opacity){
   const geo = new THREE.IcosahedronGeometry(radius, 1);
   const mat = new THREE.MeshBasicMaterial({
@@ -420,7 +420,7 @@ function createPolarGrid(){
 }
 const polarGrid = createPolarGrid();
 
-/* ================= Schwebende Daten-Texte (nur waehrend der Verarbeitung, klein & eng am Core) ================= */
+/* ================= Floating data texts (only during processing, small & close to the core) ================= */
 const TEXT_PHRASES = [
   'OCR', 'PARSE', 'INDEX', 'HASH', 'AES-256', 'SHA-1', 'TLS', 'SYNC',
   'STREAM', 'CACHE', 'QUEUE', 'SORT', 'SCAN', 'ENCODE', 'DECODE', 'MATCH',
@@ -474,12 +474,12 @@ function makeTextSprite(text){
     blending: THREE.AdditiveBlending,
     depthWrite: false
   }));
-  const base = 0.28 + Math.random() * 0.14; // ganz klein
+  const base = 0.28 + Math.random() * 0.14; // very small
   sprite.scale.set(base, base * 0.25, 1);
   sprite.frustumCulled = false;
   scene.add(sprite);
 
-  // Unterstrich-Balken unter dem Text
+  // underline bar below the text
   const underline = new THREE.Sprite(new THREE.SpriteMaterial({
     map: underlineTex,
     transparent: true,
@@ -491,7 +491,7 @@ function makeTextSprite(text){
   underline.frustumCulled = false;
   scene.add(underline);
 
-  // Leader-Linie vom Core zum Label
+  // leader line from core to label
   const lineGeo = new THREE.BufferGeometry();
   lineGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
   const line = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({
@@ -507,7 +507,7 @@ function makeTextSprite(text){
   return {
     sprite, underline, line,
     setText: draw,
-    radius: 1.25 + Math.random() * 1.35, // ganz nah am Core
+    radius: 1.25 + Math.random() * 1.35, // very close to the core
     speed: 0.15 + Math.random() * 0.35,
     y: (Math.random() - 0.5) * 2.0,
     phase: Math.random() * Math.PI * 2,
@@ -515,14 +515,14 @@ function makeTextSprite(text){
     base: base
   };
 }
-// Astrolabium-Anordnung (Variante A): Labels auf konzentrischen Ringen, jeder Ring rotiert starr
+// Astrolabium arrangement (Variant A): labels on concentric rings, each ring rotates rigidly
 const RING_CONFIG = [
   { radius: 1.45, y: -0.75, speed: 0.18 },
   { radius: 1.9,  y: -0.25, speed: -0.12 },
   { radius: 2.3,  y: 0.3,   speed: 0.15 },
   { radius: 2.7,  y: 0.8,   speed: -0.1 }
 ];
-const PER_RING = 16; // 4 Ringe x 16 = 64 Labels
+const PER_RING = 16; // 4 rings x 16 = 64 labels
 const floatTexts = [];
 let txtIdx = 0;
 for (let r = 0; r < RING_CONFIG.length; r++){
@@ -542,7 +542,7 @@ for (let r = 0; r < RING_CONFIG.length; r++){
   }
 }
 
-// ===== Sternbild-Kanten (Ring-Ketten + radiale Querverbindungen) =====
+// ===== Constellation edges (ring chains + radial cross-links) =====
 const edges = [];
 for (let r = 0; r < RING_CONFIG.length; r++){
   for (let k = 0; k < PER_RING; k++){
@@ -569,7 +569,7 @@ const constLines = new THREE.LineSegments(constGeo, constMat);
 constLines.frustumCulled = false;
 scene.add(constLines);
 
-// ===== Astrolabium-Ring mit Grad-Strichen (Algalon-Touch) =====
+// ===== Astrolabe ring with tick marks (Algalon touch) =====
 const astrolabe = (() => {
   const group = new THREE.Group();
   const mat = new THREE.LineBasicMaterial({
@@ -610,17 +610,17 @@ function updateFloatTexts(now){
     target = 0.9;
   } else if (pulling){
     target = 0.9;
-    // Formeln schnell in den Core einsaugen (erste 0.35s der Pause)
+    // quickly pull the formulas into the core (first 0.35s of the pause)
     const pullT = Math.min(1, (now - pauseStart) / 0.35);
     s = 1 - easeInCubic(pullT);
-    // 200ms-Takt: Formeln scramblen zu anderen Texten
+    // 200ms rhythm: formulas scramble into other texts
     if (now - lastScrambleTime > 0.2){
       for (const ft of floatTexts){
         ft.setText(TEXT_PHRASES[Math.floor(Math.random() * TEXT_PHRASES.length)]);
       }
       lastScrambleTime = now;
     }
-    // kurz vor der Explosion ausblenden
+    // fade out right before the explosion
     fade = 1 - Math.max(0, (now - pauseStart - 0.65) / 0.35);
   }
   for (const ft of floatTexts){
@@ -630,7 +630,7 @@ function updateFloatTexts(now){
     const pz = Math.sin(a) * ft.radius * s;
     ft.sprite.position.set(px, py, pz);
     ft.underline.position.set(px, py - ft.base * 0.22 * s, pz);
-    // Leader-Linie Core -> Label (zieht mit)
+    // leader line core -> label (moves along)
     const posArr = ft.line.geometry.attributes.position.array;
     posArr[3] = px; posArr[4] = py; posArr[5] = pz;
     ft.line.geometry.attributes.position.needsUpdate = true;
@@ -641,7 +641,7 @@ function updateFloatTexts(now){
     ft.underline.material.opacity += (o * 0.8 - ft.underline.material.opacity) * 0.12;
     ft.line.material.opacity += (o * 0.6 - ft.line.material.opacity) * 0.12;
   }
-  // Sternbild-Kanten schreiben (1 Draw-Call)
+  // write constellation edges (1 draw call)
   const cp = constPos.array;
   for (let e = 0; e < edges.length; e++){
     const fa = floatTexts[edges[e][0]].sprite.position;
@@ -652,10 +652,10 @@ function updateFloatTexts(now){
   }
   constPos.needsUpdate = true;
   constMat.opacity += ((target * fade * 0.45) - constMat.opacity) * 0.12;
-  astrolabe.rotation.y = now * 0.05; // Astrolabium dreht langsam
+  astrolabe.rotation.y = now * 0.05; // astrolabe rotates slowly
 }
 
-/* ================= Datei-Metadaten (Tooltips) ================= */
+/* ================= File metadata (tooltips) ================= */
 const EXTENSIONS = ['eml','msg','pdf','docx','zip','png','xlsx','json'];
 const fileMeta = [];
 for (let i = 0; i < TOTAL; i++){
@@ -664,7 +664,7 @@ for (let i = 0; i < TOTAL; i++){
     size: (Math.random()*480 + 2).toFixed(1)
   });
 }
-/* ================= Partikel-Pool ================= */
+/* ================= Particle pool ================= */
 const MAX_PARTICLES = 1200;
 const pGeo = new THREE.BufferGeometry();
 const pPos = new THREE.BufferAttribute(new Float32Array(MAX_PARTICLES*3), 3);
@@ -702,7 +702,7 @@ const particles = [];
 const freeSlots = [];
 let slotCount = 0;
 
-// Geordnete Daten-Scheibe: Partikel umkreisen den Core in EINER Richtung (wie ein Laufwerk)
+// ordered data disc: particles orbit the core in ONE direction (like a drive)
 function spawnProcessingParticle(){
   if (slotCount >= MAX_PARTICLES && freeSlots.length === 0) return;
   const slot = freeSlots.length ? freeSlots.pop() : slotCount++;
@@ -740,7 +740,7 @@ function updateParticles(dt){
   pCol.needsUpdate = true;
 }
 
-/* ================= Sternenhimmel ================= */
+/* ================= Starfield ================= */
 const STARS = 900;
 const starGeo = new THREE.BufferGeometry();
 {
@@ -782,13 +782,13 @@ composer.addPass(chromaPass);
 
 /* ================= Phasen & Timing ================= */
 const PHASE_IDLE = -1, PHASE_SCAN = 0, PHASE_DOWNLOAD = 1, PHASE_PROCESS = 2, PHASE_PAUSE = 3, PHASE_EXPLODE = 4, PHASE_COMPLETE = 5;
-const SCAN_DURATION   = 2.5;   // E-Mails finden (Punkte erscheinen)
-const POP_DURATION    = 0.18;  // Dauer des einzelnen Aufpoppens
-const PULL_DURATION   = 0.5;   // Dauer des Reinsaugens eines Punktes
-const FILES_PER_SECOND = 45;   // Dateien werden random reingezogen
-const PROCESS_DURATION = 10.0; // Core pulsiert -> E-Mails werden verarbeitet
-const PAUSE_DURATION  = 1.0;   // Puls stoppt, dann Explosion
-const EXPLODE_DURATION = 1.2;  // Explosion in die perfekte Kugel
+const SCAN_DURATION   = 2.5;   // finding e-mails (points appear)
+const POP_DURATION    = 0.18;  // single pop duration
+const PULL_DURATION   = 0.5;   // duration of pulling one point into the core
+const FILES_PER_SECOND = 45;   // files are pulled in randomly
+const PROCESS_DURATION = 10.0; // core pulses -> e-mails are processed
+const PAUSE_DURATION  = 1.0;   // pulse stops, then explosion
+const EXPLODE_DURATION = 1.2;  // explosion into the perfect sphere
 
 let timeNow = 0;
 let phase = PHASE_IDLE;
@@ -808,8 +808,8 @@ function shuffle(a){
 let downloadOrder = shuffle([...Array(TOTAL).keys()]);
 const pullStart = new Array(TOTAL).fill(-1);
 const explodeDelay = new Array(TOTAL).fill(0);
-const scanned = new Array(TOTAL).fill(false); // beim Auftauchen aufblitzen
-const impactDone = new Array(TOTAL).fill(false); // Welle schon ausgeloest?
+const scanned = new Array(TOTAL).fill(false); // flash when appearing
+const impactDone = new Array(TOTAL).fill(false); // wave already triggered?
 
 function resetTimers(){
   cycleStart    = performance.now() / 1000;
@@ -837,7 +837,7 @@ function easeOutBack(t){
 function easeInCubic(t){ return t*t*t; }
 function easeOutCubic(t){ const u = 1 - t; return 1 - u*u*u; }
 
-/* ================= Status 1: Scan - E-Mails finden (Punkte erscheinen) ================= */
+/* ================= Phase 1: Scan - finding e-mails (points appear) ================= */
 function updateScan(now){
   if (phase !== PHASE_SCAN || appearFinished) return;
   const elapsed = now - cycleStart;
@@ -855,7 +855,7 @@ function updateScan(now){
     return;
   }
   for (let i = 0; i < TOTAL; i++){
-    const delay = (i / TOTAL) * (SCAN_DURATION - POP_DURATION); // letztes Aufpoppen endet exakt am Scan-Ende
+    const delay = (i / TOTAL) * (SCAN_DURATION - POP_DURATION); // last pop ends exactly at the end of the scan
     const local = (elapsed - delay) / POP_DURATION;
     if (local <= 0) continue;
     if (!scanned[i]){
@@ -868,7 +868,7 @@ function updateScan(now){
   pointField.instanceMatrix.needsUpdate = true;
 }
 
-/* ================= Status 2: Download - Punkte werden random reingezogen ================= */
+/* ================= Phase 2: Download - points are pulled in randomly ================= */
 function updateDownloads(now){
   if (phase !== PHASE_DOWNLOAD) return;
   const kMax = Math.min(TOTAL, Math.floor((now - downloadStart) * FILES_PER_SECOND) + 1);
@@ -876,16 +876,16 @@ function updateDownloads(now){
     const idx = downloadOrder[k];
     if (pullStart[idx] < 0){
       pullStart[idx] = downloadStart + k / FILES_PER_SECOND;
-      pointField.setColorAt(idx, COLOR_FLASH);           // Blitz
-      animateColor(idx, COLOR_FLASH, COLOR_GREEN, 0.35); // -> Gruen
+      pointField.setColorAt(idx, COLOR_FLASH);           // flash
+      animateColor(idx, COLOR_FLASH, COLOR_GREEN, 0.35); // -> green
     }
   }
   downloadedCount = kMax;
 }
 
-/* ================= Positionen der Punkte jeden Frame ================= */
+/* ================= Per-frame point positions ================= */
 function updatePointTransforms(now){
-  if (phase === PHASE_IDLE || phase === PHASE_SCAN) return; // IDLE: Punkte versteckt; Scan steuert eigene Matrizen
+  if (phase === PHASE_IDLE || phase === PHASE_SCAN) return; // IDLE: points hidden; Scan controls its own matrices
   for (let i = 0; i < TOTAL; i++){
     if (phase === PHASE_DOWNLOAD){
       const s = pullStart[i];
@@ -894,13 +894,13 @@ function updatePointTransforms(now){
       if (t >= 1){
         if (!impactDone[i]){
           impactDone[i] = true;
-          spawnImpactWave(timeNow, randomPositions[i]); // Impact-Welle beim Einsaugen
+          spawnImpactWave(timeNow, randomPositions[i]); // impact wave when sucked in
         }
         setInstance(i, CENTER, 0);
         continue;
       }
       const e = easeInCubic(t);
-      // Vom (weiter umlaufenden) Punkt aus spiralfoermig in den Core
+      // spiral into the core from the (still orbiting) point
       dummy.position.copy(orbitPosition(i, randomPositions[i], timeNow - cycleStart)).multiplyScalar(1 - e);
       dummy.scale.setScalar(1 - e * 0.95);
       dummy.updateMatrix();
@@ -910,7 +910,7 @@ function updatePointTransforms(now){
       const d = explodeDelay[i];
       const t = (now - explodeStart - d) / EXPLODE_DURATION;
       if (t <= 0){ setInstance(i, CENTER, 0); continue; }
-      if (t >= 1){ setInstance(i, perfectPositions[i], 1); continue; } // sortiert = starr
+      if (t >= 1){ setInstance(i, perfectPositions[i], 1); continue; } // sorted = static
       const e = easeOutCubic(t);
       dummy.position.copy(perfectPositions[i]).multiplyScalar(e);
       dummy.scale.setScalar(Math.max(0.02, easeOutBack(t)));
@@ -921,7 +921,7 @@ function updatePointTransforms(now){
   pointField.instanceMatrix.needsUpdate = true;
 }
 
-/* ================= Farbuebergaenge ================= */
+/* ================= Color transitions ================= */
 const colorAnims = new Map(); // index -> { t0, dur, from, to }
 function animateColor(i, from, to, dur){
   colorAnims.set(i, { t0: timeNow, dur, from, to });
@@ -940,16 +940,16 @@ function updateColorAnims(now){
   pointField.instanceColor.needsUpdate = true;
 }
 
-/* ================= Status 3: Explosion in die perfekte Kugel ================= */
+/* ================= Phase 3: Explosion into the perfect sphere ================= */
 let shockwave = null;
 function initExplosion(){
   if (explodeInitialized) return;
   explodeInitialized = true;
   for (let i = 0; i < TOTAL; i++){
     explodeDelay[i] = Math.random() * 0.3;
-    animateColor(i, COLOR_GREEN, failFlags[i] ? COLOR_FAIL : COLOR_CYAN, 1.0); // Gruen -> Eisblau (Fehler: Rot)
+    animateColor(i, COLOR_GREEN, failFlags[i] ? COLOR_FAIL : COLOR_CYAN, 1.0); // green -> ice white (fail: red)
   }
-  // Expansions-Schockwelle
+  // expanding shockwave
   shockwave = new THREE.Mesh(
     new THREE.SphereGeometry(1, 32, 32),
     new THREE.MeshBasicMaterial({
@@ -977,11 +977,11 @@ function updateShockwave(now){
   }
 }
 
-/* ================= Core pulsierend (E-Mails werden verarbeitet) ================= */
+/* ================= Core pulsing (e-mails are processed) ================= */
 function updateCore(now){
   coreMat.uniforms.uTime.value = now;
   if (phase === PHASE_PROCESS){
-    // Energie-Puls: weicher Anlauf UND weiches Ausklingen (kein Abreissen am Ende)
+    // energy pulse: soft attack AND soft decay (no hard cut at the end)
     const tt = now - processStart;
     const fadeIn  = Math.min(1, tt / 0.8);
     const fadeOut = Math.min(1, (PROCESS_DURATION - tt) / 0.8);
@@ -997,12 +997,12 @@ function updateCore(now){
   }
 }
 
-/* ================= Partikel waehrend der Verarbeitung ================= */
+/* ================= Particles during processing ================= */
 function updateProcessingParticles(now){
-  // Partikel-Sturm entfernt: Verarbeitung wird durch OCR-Band + Analyse-Ringe dargestellt
+  // particle storm removed: processing is shown by OCR band + analyzer rings
 }
 
-/* ================= Puls-Ringe (Energie-Wellen nach aussen) ================= */
+/* ================= Pulse rings (energy waves outward) ================= */
 const pulseRings = [];
 let lastPulseRing = 0;
 function spawnPulseRing(now){
@@ -1047,7 +1047,7 @@ function updatePulseRings(now){
   }
 }
 
-/* ================= OCR-Scan-Band (sweep ueber den Core) ================= */
+/* ================= OCR scan band (sweeping over the core) ================= */
 const scanBand = (() => {
   const pts = [];
   for (let i = 0; i <= 64; i++){
@@ -1079,7 +1079,7 @@ function updateScanBand(now){
   }
 }
 
-/* ================= Analyse-Ringe (nur waehrend der Verarbeitung) ================= */
+/* ================= Analyzer rings (only during processing) ================= */
 function updateAnalyzers(dt){
   const target = phase === PHASE_PROCESS ? 0.55 : 0;
   analyzer1.material.opacity += (target - analyzer1.material.opacity) * 0.12;
@@ -1089,7 +1089,7 @@ function updateAnalyzers(dt){
   analyzer2.rotation.y -= dt * spd * 1.3;
 }
 
-/* ================= Impact-Wellen (jede eingesaugte Kugel -> Welle auf dem Core) ================= */
+/* ================= Impact waves (each sucked-in sphere -> wave on the core) ================= */
 const IMPACT_POOL = 25;
 const impactWaveGeo = (() => {
   const pts = [];
@@ -1169,10 +1169,10 @@ function updateHover(now){
   if (hits.length && hits[0].instanceId !== undefined){
     const id = hits[0].instanceId;
     const meta = fileMeta[id];
-    let status = 'NICHT RUNTERGELADEN', col = '#4a6a8a';
+    let status = 'NOT DOWNLOADED', col = '#4a6a8a';
     if (phase === PHASE_COMPLETE){
-      if (failFlags[id]){ status = 'VERARBEITUNGSFEHLER'; col = '#ff3355'; }
-      else { status = 'SORTIERT'; col = '#9fffee'; }
+      if (failFlags[id]){ status = 'PROCESSING FAIL'; col = '#ff3355'; }
+      else { status = 'SORTED'; col = '#9fffee'; }
     }
     tooltipEl.innerHTML =
       '<div class="tt-name">' + meta.name + '</div>' +
@@ -1197,7 +1197,7 @@ const rateWindow = [];
 function updateHUD(now){
   const elapsed = now - cycleStart;
 
-  // Waehrend des Scans werden die E-Mails "gefunden" (Zaehler laeuft hoch)
+  // During scan the e-mails are "found" (counter counts up)
   if (phase === PHASE_SCAN){
     const sp = Math.max(0, (now - cycleStart) / SCAN_DURATION);
     foundCount = Math.min(TOTAL, Math.floor(sp * TOTAL) + 1);
@@ -1211,26 +1211,26 @@ function updateHUD(now){
   progressBar.style.width = (phase === PHASE_IDLE ? 0 : (dispCount / TOTAL * 100)).toFixed(2) + '%';
   elapsedText.textContent = phase === PHASE_IDLE ? '0.0s' : elapsed.toFixed(1) + 's';
 
-  let state = 'BEREIT — DRÜCKE DOWNLOAD';
-  if (phase === PHASE_SCAN) state = 'SCANNING — FINDE E-MAILS\u2026';
+  let state = 'READY — PRESS DOWNLOAD';
+  if (phase === PHASE_SCAN) state = 'SCANNING — FINDING E-MAILS\u2026';
   else if (phase === PHASE_DOWNLOAD) state = 'DOWNLOADING — ' + downloadedCount + ' / ' + TOTAL;
   else if (phase === PHASE_PROCESS){
     const proc = Math.min(1, (now - processStart) / PROCESS_DURATION);
-    let step = 'OCR-ERKENNUNG';
-    if (proc > 0.33) step = 'TEXT-PARSING';
-    if (proc > 0.66) step = 'METADATEN-INDEXIERUNG';
+    let step = 'OCR DETECTION';
+    if (proc > 0.33) step = 'TEXT PARSING';
+    if (proc > 0.66) step = 'METADATA INDEXING';
     state = step + ' \u2014 ' + Math.min(99, Math.floor(proc * 100)) + '%';
   }
-  else if (phase === PHASE_PAUSE) state = "VERARBEITUNG FERTIG — GLEICH GEHT'S LOS";
-  else if (phase === PHASE_EXPLODE) state = 'SORTIERT — PERFEKTE KUGEL';
-  else if (phase === PHASE_COMPLETE) state = 'FERTIG — ALLE E-MAILS VERARBEITET (' + failCount + ' FEHLER)';
+  else if (phase === PHASE_PAUSE) state = 'PROCESSING COMPLETE — GETTING READY';
+  else if (phase === PHASE_EXPLODE) state = 'SORTED — PERFECT SPHERE';
+  else if (phase === PHASE_COMPLETE) state = 'DONE — ALL E-MAILS PROCESSED (' + failCount + ' FAILS)';
   stateText.textContent = state;
   stateText.classList.toggle('blink', phase === PHASE_DOWNLOAD || phase === PHASE_PROCESS);
 
   // Download-Button: aktiv nur im Standby/nach Abschluss
   const running = phase >= PHASE_SCAN && phase < PHASE_COMPLETE;
   restartBtn.disabled = running;
-  restartBtn.textContent = running ? 'LÄUFT\u2026' : '\u25B6 DOWNLOAD';
+  restartBtn.textContent = running ? 'RUNNING\u2026' : '\u25B6 DOWNLOAD';
 
   if (phase === PHASE_DOWNLOAD){
     rateWindow.push({ t: now, c: downloadedCount });
@@ -1242,9 +1242,9 @@ function updateHUD(now){
   }
 }
 
-/* ================= Regler ================= */
-let coreGlow = 1.59;  // Multiplikator fuer Core-Gluehen (live)
-let pointGlow = 0.9;  // Multiplikator fuer Punkt-Helligkeit (live)
+/* ================= Controls ================= */
+let coreGlow = 1.59;  // multiplier for core glow (live)
+let pointGlow = 0.9;  // multiplier for point brightness (live)
 function bindSlider(input, label, fn){
   input.addEventListener('input', () => {
     const v = parseFloat(input.value);
@@ -1312,7 +1312,7 @@ restartBtn.addEventListener('click', () => {
   coreLight.intensity = CORE_LIGHT_BASE * coreGlow;
 });
 
-/* ================= Hauptschleife ================= */
+/* ================= Main loop ================= */
 let lastFrame = performance.now();
 function animate(nowMs){
   requestAnimationFrame(animate);
@@ -1347,7 +1347,7 @@ function animate(nowMs){
   orbit1.rotation.y += dt * 0.4;
   orbit2.rotation.y -= dt * 0.3;
   orbit3.rotation.y += dt * 0.25;
-  shieldPanel.rotation.y -= dt * 0.3; // gegenlaeufig -> Facetten-Schimmer
+  shieldPanel.rotation.y -= dt * 0.3; // counter-rotating -> facet shimmer
   shieldPanel.rotation.x += dt * 0.08;
   controls.update();
   composer.render();
