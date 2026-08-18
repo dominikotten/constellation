@@ -836,7 +836,6 @@ const docCamTarget = new THREE.Vector3();
 let docIndex = 0;
 let docStart = 0;
 let docsFinished = false;
-let docBurstDone = -1;
 
 function shuffle(a){
   for (let i = a.length - 1; i > 0; i--){
@@ -929,7 +928,17 @@ function updatePointTransforms(now){
   for (let i = 0; i < TOTAL; i++){
     if (phase === PHASE_DOWNLOAD){
       const s = pullStart[i];
-      if (s < 0){ setInstanceOrbiting(i, randomPositions[i], 1, timeNow - cycleStart); continue; }
+      if (s < 0){
+        // remaining cloud: slowly swells outward with a lively bob while it drains
+        const swell = 1 + 0.4 * Math.min(1, (now - downloadStart) / (TOTAL / FILES_PER_SECOND + PULL_DURATION));
+        const pos = orbitPosition(i, randomPositions[i], timeNow - cycleStart).multiplyScalar(swell);
+        pos.y += Math.sin(timeNow * 1.7 + i * 0.37) * 0.3;
+        dummy.position.copy(pos);
+        dummy.scale.setScalar(1);
+        dummy.updateMatrix();
+        pointField.setMatrixAt(i, dummy.matrix);
+        continue;
+      }
       const t = (now - s) / PULL_DURATION;
       if (t >= 1){
         if (!impactDone[i]){
@@ -945,18 +954,29 @@ function updatePointTransforms(now){
       dummy.scale.setScalar(1 - e * 0.95);
       dummy.updateMatrix();
       pointField.setMatrixAt(i, dummy.matrix);
+    } else if (phase === PHASE_PROCESS || phase === PHASE_PAUSE){
+      // the cloud re-emerges from the core and swells outward, swaying and pulsing
+      const p = Math.min(1, (now - processStart) / PROCESS_DURATION);
+      const f = easeInOutCubic(p);
+      const r = 1.2 + (SHELL_RADIUS + 1.0) * f; // grows up to ~6.5
+      const a = timeNow * (0.5 + (i % 7) * 0.15) + i * 1.7;
+      dummy.position.copy(perfectPositions[i]).normalize().multiplyScalar(r);
+      dummy.position.addScaledVector(docSwayDir[i], Math.sin(a) * 0.5 * (0.3 + f));
+      dummy.scale.setScalar(0.6 + 0.4 * Math.sin(a * 0.7) * (0.4 + f));
+      dummy.updateMatrix();
+      pointField.setMatrixAt(i, dummy.matrix);
     } else {
-      // PROCESS / EXPLODE / COMPLETE
+      // EXPLODE / COMPLETE: the cloud settles into the perfect sphere
       const d = explodeDelay[i];
       const t = (now - explodeStart - d) / EXPLODE_DURATION;
-      if (t <= 0){ setInstance(i, CENTER, 0); continue; }
       if (t >= 1){ setInstance(i, perfectPositions[i], 1); continue; } // sorted = static
-      const e = easeOutCubic(t);
-      // undulating emergence: sideways sway that decays while the sphere settles
-      const sway = Math.sin(t * Math.PI * 2) * (1 - e) * 0.5;
-      dummy.position.copy(perfectPositions[i]).multiplyScalar(e);
-      dummy.position.addScaledVector(docSwayDir[i], sway);
-      dummy.scale.setScalar(Math.max(0.02, easeOutBack(t)));
+      const tt = Math.max(0, t);
+      const e = easeOutCubic(tt);
+      // from the expanded cloud radius down to the perfect shell, with a decaying sway
+      const fromR = SHELL_RADIUS + 1.0;
+      dummy.position.copy(perfectPositions[i]).normalize().multiplyScalar(fromR + (SHELL_RADIUS - fromR) * e);
+      dummy.position.addScaledVector(docSwayDir[i], Math.sin(tt * Math.PI * 2) * (1 - e) * 0.5);
+      dummy.scale.setScalar(0.8 + 0.2 * e);
       dummy.updateMatrix();
       pointField.setMatrixAt(i, dummy.matrix);
     }
@@ -1315,78 +1335,7 @@ docRingProg.visible = false;
 scene.add(docRing);
 scene.add(docRingProg);
 
-// small particle burst at each arrival (expanding from the sphere)
-const DOC_BURSTS = 16;
-const DOC_BURST_PART = 22;
-function makeSoftPointTexture(){
-  const c = document.createElement('canvas');
-  c.width = 64; c.height = 64;
-  const ctx = c.getContext('2d');
-  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-  g.addColorStop(0, 'rgba(255,255,255,1)');
-  g.addColorStop(0.35, 'rgba(255,255,255,0.85)');
-  g.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 64, 64);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
-const dbGeo = new THREE.BufferGeometry();
-const dbPos = new THREE.BufferAttribute(new Float32Array(DOC_BURSTS * DOC_BURST_PART * 3), 3);
-const dbCol = new THREE.BufferAttribute(new Float32Array(DOC_BURSTS * DOC_BURST_PART * 3), 3);
-dbGeo.setAttribute('position', dbPos);
-dbGeo.setAttribute('color', dbCol);
-dbGeo.setDrawRange(0, 0);
-const docBurstMat = new THREE.PointsMaterial({
-  size: 0.18, map: makeSoftPointTexture(), alphaTest: 0.001,
-  vertexColors: true, transparent: true,
-  blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false
-});
-const docBurstPts = new THREE.Points(dbGeo, docBurstMat);
-docBurstPts.frustumCulled = false;
-scene.add(docBurstPts);
-const docBursts = [];
-for (let b = 0; b < DOC_BURSTS; b++){
-  const dirs = [];
-  for (let i = 0; i < DOC_BURST_PART; i++) dirs.push(new THREE.Vector3());
-  docBursts.push({ active: false, t0: 0, pos: new THREE.Vector3(), dirs, speeds: new Float32Array(DOC_BURST_PART) });
-}
-let docBurstSlot = 0;
-function spawnDocBurst(now, pos){
-  const b = docBursts[docBurstSlot];
-  docBurstSlot = (docBurstSlot + 1) % DOC_BURSTS;
-  b.active = true;
-  b.t0 = now;
-  b.pos.copy(pos);
-  const toCam = new THREE.Vector3().subVectors(camera.position, pos).normalize();
-  for (let i = 0; i < DOC_BURST_PART; i++){
-    const d = b.dirs[i].randomDirection();
-    if (d.dot(toCam) > 0) d.reflect(toCam); // never fly toward the camera
-    b.speeds[i] = 2.0 + Math.random() * 3.0;
-  }
-}
-function updateDocBursts(now){
-  let maxSlot = -1;
-  for (let b = 0; b < DOC_BURSTS; b++){
-    const burst = docBursts[b];
-    if (!burst.active) continue;
-    const t = (now - burst.t0) / 0.75;
-    if (t >= 1){ burst.active = false; continue; }
-    const fade = 1 - t;
-    for (let i = 0; i < DOC_BURST_PART; i++){
-      const slot = b * DOC_BURST_PART + i;
-      const d = burst.dirs[i];
-      const dist = burst.speeds[i] * t;
-      dbPos.setXYZ(slot, burst.pos.x + d.x * dist, burst.pos.y + d.y * dist, burst.pos.z + d.z * dist);
-      dbCol.setXYZ(slot, 1 * fade, 0.95 * fade, 0.7 * fade);
-      if (slot > maxSlot) maxSlot = slot;
-    }
-  }
-  dbGeo.setDrawRange(0, maxSlot + 1);
-  dbPos.needsUpdate = true;
-  dbCol.needsUpdate = true;
-}
+// (burst particles removed - the sphere now fades out into the flash ring instead)
 
 function easeInOutCubic(t){ return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2; }
 
@@ -1492,12 +1441,6 @@ function updateDocs(now, dt){
   if (ringOp <= 0.01 && docRing.material.opacity < 0.02) docRing.visible = false;
   if (ringOpP <= 0.01 && docRingProg.material.opacity < 0.02) docRingProg.visible = false;
 
-  // spawn the burst when a sphere completes
-  if (!docsFinished && tActive >= COMMENT_TIME + UPLOAD_TIME && docBurstDone < docIndex){
-    spawnDocBurst(now, activePos);
-    docBurstDone = docIndex;
-  }
-
   for (let i = 0; i < TOTAL; i++){
     const idx = docOrder[i];
     const t = now - (docStart + i / DOCS_PER_SECOND);
@@ -1524,8 +1467,8 @@ function updateDocs(now, dt){
     } else {
       const e = (t - COMMENT_TIME - UPLOAD_TIME) / ARRIVE_TIME;
       docColTmp.copy(DOC_GREEN).lerp(DOC_FLASH, Math.min(1, e * 2));
-      scale = 2.05 + e * 3.0; // inflate into a bright blob...
-      if (e > 0.72) scale = 0; // ...then pop into the burst
+      scale = 2.05; // hold the bright flash...
+      if (e > 0.4) scale = 2.05 * Math.max(0, (1 - e) / 0.6); // ...then a 300ms fade to nothing
     }
     dummy.position.copy(perfectPositions[idx]);
     dummy.scale.setScalar(Math.max(0.0001, scale));
@@ -1732,8 +1675,6 @@ restartBtn.addEventListener('click', () => {
   docRing.visible = false;
   docRingProg.visible = false;
   docRingProg.geometry.setDrawRange(0, 1);
-  for (const b of docBursts) b.active = false;
-  docBurstDone = -1;
 });
 
 /* ================= Main loop ================= */
@@ -1759,7 +1700,6 @@ function animate(nowMs){
   updateFloatTexts(timeNow);
   updateImpactWaves(timeNow);
   updateDocs(timeNow, dt);
-  updateDocBursts(timeNow);
   updateParticles(dt);
   updateShockwave(timeNow);
   updateHover(timeNow);
