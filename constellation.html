@@ -1245,8 +1245,10 @@ function makeDocLabel(text, col){
   ctx.shadowColor = 'rgba(0,180,255,0.9)'; ctx.shadowBlur = 8;
   ctx.fillStyle = col;
   ctx.fillText(text, 128, 24);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: new THREE.CanvasTexture(c),
+    map: tex,
     transparent: true, opacity: 0,
     blending: THREE.AdditiveBlending, depthWrite: false
   }));
@@ -1292,6 +1294,20 @@ scene.add(docRingProg);
 // small particle burst at each arrival (expanding from the sphere)
 const DOC_BURSTS = 16;
 const DOC_BURST_PART = 10;
+function makeSoftPointTexture(){
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 64;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.35, 'rgba(255,255,255,0.85)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 64);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
 const dbGeo = new THREE.BufferGeometry();
 const dbPos = new THREE.BufferAttribute(new Float32Array(DOC_BURSTS * DOC_BURST_PART * 3), 3);
 const dbCol = new THREE.BufferAttribute(new Float32Array(DOC_BURSTS * DOC_BURST_PART * 3), 3);
@@ -1299,8 +1315,9 @@ dbGeo.setAttribute('position', dbPos);
 dbGeo.setAttribute('color', dbCol);
 dbGeo.setDrawRange(0, 0);
 const docBurstMat = new THREE.PointsMaterial({
-  size: 0.22, vertexColors: true, transparent: true,
-  blending: THREE.AdditiveBlending, depthWrite: false
+  size: 0.16, map: makeSoftPointTexture(), alphaTest: 0.001,
+  vertexColors: true, transparent: true,
+  blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false
 });
 const docBurstPts = new THREE.Points(dbGeo, docBurstMat);
 docBurstPts.frustumCulled = false;
@@ -1318,8 +1335,10 @@ function spawnDocBurst(now, pos){
   b.active = true;
   b.t0 = now;
   b.pos.copy(pos);
+  const toCam = new THREE.Vector3().subVectors(camera.position, pos).normalize();
   for (let i = 0; i < DOC_BURST_PART; i++){
-    b.dirs[i].randomDirection();
+    const d = b.dirs[i].randomDirection();
+    if (d.dot(toCam) > 0) d.reflect(toCam); // never fly toward the camera
     b.speeds[i] = 1.5 + Math.random() * 2.5;
   }
 }
