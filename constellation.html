@@ -800,7 +800,7 @@ const chromaPass = new ShaderPass({
 composer.addPass(chromaPass);
 
 /* ================= Phasen & Timing ================= */
-const PHASE_IDLE = -1, PHASE_SCAN = 0, PHASE_DOWNLOAD = 1, PHASE_PROCESS = 2, PHASE_PAUSE = 3, PHASE_EXPLODE = 4, PHASE_COMPLETE = 5;
+const PHASE_IDLE = -1, PHASE_SCAN = 0, PHASE_DOWNLOAD = 1, PHASE_PROCESS = 2, PHASE_PAUSE = 3, PHASE_EXPLODE = 4, PHASE_COMPLETE = 5, PHASE_DOCS = 6;
 const SCAN_DURATION   = 2.5;   // finding e-mails (points appear)
 const POP_DURATION    = 0.18;  // single pop duration
 const PULL_DURATION   = 0.5;   // duration of pulling one point into the core
@@ -816,6 +816,19 @@ let appearFinished = false;
 let downloadedCount = 0;
 let foundCount = 0;
 let explodeInitialized = false;
+// Comment & Upload (per sphere, sequential)
+const DOCS_PER_SECOND = 2.7;
+const FOCUS_DUR = 0.12, BLUE_DUR = 0.08, GREEN_DUR = 0.08, POP_DUR = 0.09;
+const DOCS_SPHERE_DUR = FOCUS_DUR + BLUE_DUR + GREEN_DUR + POP_DUR; // 0.37
+const DOC_FOCUS = new THREE.Color(0xffffff).multiplyScalar(4);
+const DOC_BLUE  = new THREE.Color(0x3d8bff).multiplyScalar(4);
+const DOC_GREEN = new THREE.Color(0x00ff88).multiplyScalar(4);
+const DOC_FLASH = new THREE.Color(0xd0ffee).multiplyScalar(5);
+const camFocus = new THREE.Vector3();
+const camDir = new THREE.Vector3();
+let docIndex = 0;
+let docStart = 0;
+let docsFinished = false;
 
 function shuffle(a){
   for (let i = a.length - 1; i > 0; i--){
@@ -904,7 +917,7 @@ function updateDownloads(now){
 
 /* ================= Per-frame point positions ================= */
 function updatePointTransforms(now){
-  if (phase === PHASE_IDLE || phase === PHASE_SCAN) return; // IDLE: points hidden; Scan controls its own matrices
+  if (phase === PHASE_IDLE || phase === PHASE_SCAN || phase === PHASE_DOCS) return; // IDLE/DOCS handled separately
   for (let i = 0; i < TOTAL; i++){
     if (phase === PHASE_DOWNLOAD){
       const s = pullStart[i];
@@ -1165,6 +1178,57 @@ function updateImpactWaves(now){
   }
 }
 
+/* ================= Comment & Upload (per sphere, sequential) ================= */
+function updateDocs(now){
+  if (phase !== PHASE_DOCS) return;
+  docIndex = Math.min(TOTAL, Math.floor((now - docStart) * DOCS_PER_SECOND));
+  docsFinished = docIndex >= TOTAL;
+
+  // point in front of the camera (center of view, closer)
+  camera.getWorldDirection(camDir);
+  camFocus.copy(camera.position).addScaledVector(camDir, 3.5);
+
+  for (let i = 0; i < TOTAL; i++){
+    const t = now - (docStart + i / DOCS_PER_SECOND);
+    if (t < 0){
+      // not yet processed: stays on the sorted sphere
+      setInstance(i, perfectPositions[i], 1);
+      continue;
+    }
+    if (t >= DOCS_SPHERE_DUR){
+      // done: sphere is gone
+      setInstance(i, CENTER, 0);
+      continue;
+    }
+    // active sphere: focus -> blue (comment) -> green (upload) -> explosion
+    let col;
+    if (t < FOCUS_DUR){
+      const f = easeOutCubic(t / FOCUS_DUR);
+      dummy.position.copy(perfectPositions[i]).lerp(camFocus, f);
+      dummy.scale.setScalar(1 + 2 * f);
+      col = DOC_FOCUS;
+    } else if (t < FOCUS_DUR + BLUE_DUR){
+      dummy.position.copy(camFocus);
+      dummy.scale.setScalar(3);
+      col = DOC_BLUE;
+    } else if (t < FOCUS_DUR + BLUE_DUR + GREEN_DUR){
+      dummy.position.copy(camFocus);
+      dummy.scale.setScalar(3);
+      col = DOC_GREEN;
+    } else {
+      const f = (t - (FOCUS_DUR + BLUE_DUR + GREEN_DUR)) / POP_DUR;
+      dummy.position.copy(camFocus);
+      dummy.scale.setScalar(3 + f * 2);
+      col = DOC_FLASH;
+    }
+    dummy.updateMatrix();
+    pointField.setMatrixAt(i, dummy.matrix);
+    pointField.setColorAt(i, col);
+  }
+  pointField.instanceMatrix.needsUpdate = true;
+  pointField.instanceColor.needsUpdate = true;
+}
+
 /* ================= Hover-Tooltips ================= */
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
@@ -1224,6 +1288,7 @@ function updateHUD(now){
 
   let dispCount = 0;
   if (phase === PHASE_SCAN) dispCount = foundCount;
+  else if (phase === PHASE_DOCS) dispCount = docIndex;
   else dispCount = downloadedCount;
 
   progressText.textContent = phase === PHASE_IDLE ? '0 / ?' : dispCount + ' / ' + TOTAL;
@@ -1243,13 +1308,21 @@ function updateHUD(now){
   else if (phase === PHASE_PAUSE) state = 'PROCESSING COMPLETE — GETTING READY';
   else if (phase === PHASE_EXPLODE) state = 'SORTED — PERFECT SPHERE';
   else if (phase === PHASE_COMPLETE) state = 'DONE — ALL E-MAILS PROCESSED (' + failCount + ' FAILS)';
+  else if (phase === PHASE_DOCS) state = docsFinished ? 'COMPLETE — ALL ' + TOTAL + ' DOCUMENTS UPLOADED' : 'COMMENT & UPLOAD \u2014 ' + docIndex + ' / ' + TOTAL;
   stateText.textContent = state;
   stateText.classList.toggle('blink', phase === PHASE_DOWNLOAD || phase === PHASE_PROCESS);
 
-  // Download-Button: aktiv nur im Standby/nach Abschluss
-  const running = phase >= PHASE_SCAN && phase < PHASE_COMPLETE;
+  // Button: DOWNLOAD im Standby, COMMENT & UPLOAD nach Abschluss, RESTART nach Upload
+  const docsDone = phase === PHASE_DOCS && docsFinished;
+  const running = phase !== PHASE_IDLE && phase !== PHASE_COMPLETE && !docsDone;
   restartBtn.disabled = running;
-  restartBtn.textContent = running ? 'RUNNING\u2026' : '\u25B6 DOWNLOAD';
+  if (!running){
+    if (phase === PHASE_COMPLETE) restartBtn.textContent = '\u25B6 COMMENT & UPLOAD';
+    else if (phase === PHASE_DOCS) restartBtn.textContent = '\u25B6 RESTART';
+    else restartBtn.textContent = '\u25B6 DOWNLOAD';
+  } else {
+    restartBtn.textContent = 'RUNNING\u2026';
+  }
 
   if (phase === PHASE_DOWNLOAD){
     rateWindow.push({ t: now, c: downloadedCount });
@@ -1287,7 +1360,15 @@ document.getElementById('controlsToggle').addEventListener('click', () => {
 /* ================= Download-Button ================= */
 const restartBtn = document.getElementById('restartBtn');
 restartBtn.addEventListener('click', () => {
-  if (phase !== PHASE_IDLE && phase !== PHASE_COMPLETE) return; // laeuft schon
+  // Comment & Upload starten (Kugeln bleiben auf der sortierten Kugel)
+  if (phase === PHASE_COMPLETE){
+    docStart = performance.now() / 1000;
+    docIndex = 0;
+    docsFinished = false;
+    phase = PHASE_DOCS;
+    return;
+  }
+  if (phase !== PHASE_IDLE && !(phase === PHASE_DOCS && docsFinished)) return; // laeuft schon
   scatterPositions();
   pickFails();
   downloadOrder = shuffle([...Array(TOTAL).keys()]);
@@ -1323,6 +1404,8 @@ restartBtn.addEventListener('click', () => {
   rateWindow.length = 0;
   downloadedCount = 0;
   foundCount = 0;
+  docIndex = 0;
+  docsFinished = false;
   appearFinished = false;
   phase = PHASE_SCAN;
   resetTimers();
@@ -1339,7 +1422,7 @@ function animate(nowMs){
   const dt = Math.min((nowMs - lastFrame) / 1000, 0.1);
   lastFrame = nowMs;
 
-  if (phase !== PHASE_IDLE) phase = computePhase(timeNow);
+  if (phase !== PHASE_IDLE && phase !== PHASE_DOCS) phase = computePhase(timeNow);
 
   updateScan(timeNow);
   updateDownloads(timeNow);
@@ -1353,6 +1436,7 @@ function animate(nowMs){
   updateAnalyzers(dt);
   updateFloatTexts(timeNow);
   updateImpactWaves(timeNow);
+  updateDocs(timeNow);
   updateParticles(dt);
   updateShockwave(timeNow);
   updateHover(timeNow);
