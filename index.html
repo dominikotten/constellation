@@ -2,14 +2,14 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>AI Core — 3D E-Mail Dashboard</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='38' fill='none' stroke='%2300ffd0' stroke-width='8'/><circle cx='50' cy='50' r='8' fill='%2300ffd0'/></svg>">
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body { height:100%; }
-  body { overflow:hidden; background:#04070f; font-family:'Consolas','Courier New',monospace; color:#bcd8ff; user-select:none; -webkit-user-select:none; }
-  canvas { display:block; }
+  body { overflow:hidden; background:#04070f; font-family:'Consolas','Courier New',monospace; color:#bcd8ff; user-select:none; -webkit-user-select:none; overscroll-behavior:none; -webkit-tap-highlight-color:transparent; }
+  canvas { display:block; touch-action:none; }
   #hud { position:fixed; inset:0; pointer-events:none; z-index:10; }
   .panel { position:relative; background:rgba(8,16,28,0.6); border:1px solid rgba(0,180,255,0.22); border-radius:8px; backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); box-shadow:inset 0 0 24px rgba(0,140,255,0.06), 0 4px 18px rgba(0,0,0,0.5); }
   .jarvis-corner::before, .jarvis-corner::after { content:''; position:absolute; width:12px; height:12px; pointer-events:none; }
@@ -51,6 +51,21 @@
   #tooltip .tt-name { color:#d6f2ff; }
   #scanlines { position:fixed; inset:0; pointer-events:none; z-index:6; background:repeating-linear-gradient(0deg, rgba(40,100,180,0.05) 0px, rgba(40,100,180,0.05) 1px, transparent 1px, transparent 3px); }
   #vignette { position:fixed; inset:0; pointer-events:none; z-index:5; background:radial-gradient(ellipse at center, transparent 50%, rgba(0,4,16,0.75) 100%); }
+  /* Mobile layout */
+  @media (max-width: 700px){
+    #titlePanel { top:8px; left:8px; padding:8px 12px; }
+    #titlePanel h1 { font-size:14px; letter-spacing:3px; }
+    #titlePanel p { font-size:8px; letter-spacing:2px; }
+    #progressPanel { top:8px; width:58vw; padding:8px 10px; }
+    #progressText { font-size:12px; }
+    #stateText { font-size:8px; letter-spacing:2px; }
+    #restartBtn { top:8px; right:8px; padding:8px 12px; font-size:9px; letter-spacing:2px; }
+    #controlsPanel { top:58px; right:8px; width:170px; padding:10px 12px; }
+    #controlsBody label { font-size:9px; }
+    #statsPanel { bottom:8px; left:8px; padding:8px 12px; font-size:9px; line-height:1.8; }
+    #legendPanel { display:none; }
+    #tooltip { font-size:10px; }
+  }
 </style>
 </head>
 <body>
@@ -123,7 +138,8 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 /* ================= Renderer ================= */
 const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' });
 renderer.setSize(innerWidth, innerHeight);
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 0 && innerWidth < 800);
+renderer.setPixelRatio(Math.min(devicePixelRatio, isMobile ? 1.5 : 2));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.19;
 document.body.appendChild(renderer.domElement);
@@ -672,6 +688,9 @@ const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 const bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.3, 0.13, 0.5);
 composer.addPass(bloomPass);
+if (isMobile){
+  bloomPass.resolution.set(Math.min(innerWidth * 0.5, 640), Math.min(innerHeight * 0.5, 480));
+}
 composer.addPass(new OutputPass());
 // Leichte chromatische Aberration -> "Energie unter Spannung"
 const chromaPass = new ShaderPass({
@@ -883,7 +902,7 @@ function updateShockwave(now){
     shockwave = null;
   } else {
     shockwave.scale.setScalar(1 + t * 7);
-    shockwave.material.opacity = 0.7 * (1 - t);
+    shockwave.material.opacity = 0.7 * Math.pow(1 - t, 2); // smooth ease-out fade
   }
 }
 
@@ -953,7 +972,7 @@ function updatePulseRings(now){
       continue;
     }
     r.line.scale.setScalar(1 + t * 4.5);
-    r.line.material.opacity = 0.7 * (1 - t);
+    r.line.material.opacity = 0.7 * Math.pow(1 - t, 2); // smooth ease-out fade
   }
 }
 
@@ -1052,7 +1071,7 @@ function updateImpactWaves(now){
       continue;
     }
     w.line.scale.setScalar(1.05 + t * 0.95);
-    w.line.material.opacity = 0.85 * (1 - t);
+    w.line.material.opacity = 0.85 * Math.pow(1 - t, 2); // smooth ease-out fade
   }
 }
 
