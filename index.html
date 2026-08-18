@@ -550,12 +550,19 @@ function updateFloatTexts(now){
     target = 0.95;
     // words fade in gently at their constellation positions (smooth, not a hard spawn)
     appear = easeInOutCubic(Math.min(1, (now - processStart) / 1.4));
+    // words scramble to other terms while they fly around
+    if (now - lastScrambleTime > 0.7){
+      for (const ft of floatTexts){
+        ft.setText(TEXT_PHRASES[Math.floor(Math.random() * TEXT_PHRASES.length)]);
+      }
+      lastScrambleTime = now;
+    }
   } else if (pulling){
     target = 0.95;
-    // quickly pull the formulas into the core (first 0.35s of the pause)
-    const pullT = Math.min(1, (now - pauseStart) / 0.35);
-    s = 1 - easeInCubic(pullT);
-    // 200ms rhythm: formulas scramble into other texts
+    // smoothly pull the words back into the core (0.8s)
+    const pullT = Math.min(1, (now - pauseStart) / 0.8);
+    s = 1 - easeInOutCubic(pullT);
+    // fast scramble rhythm as they get pulled in
     if (now - lastScrambleTime > 0.2){
       for (const ft of floatTexts){
         ft.setText(TEXT_PHRASES[Math.floor(Math.random() * TEXT_PHRASES.length)]);
@@ -563,7 +570,7 @@ function updateFloatTexts(now){
       lastScrambleTime = now;
     }
     // fade out right before the explosion
-    fade = 1 - Math.max(0, (now - pauseStart - 0.65) / 0.35);
+    fade = 1 - Math.max(0, (now - pauseStart - 0.75) / 0.25);
   }
   for (const ft of floatTexts){
     // livelier orbit: second harmonic + stronger bob
@@ -739,7 +746,7 @@ const ARRIVE_TIME = 0.5;      // white flash + burst at completion
 const DOCS_SPHERE_DUR = COMMENT_TIME + UPLOAD_TIME + ARRIVE_TIME;
 const DOCS_PER_SECOND = 1 / DOCS_SPHERE_DUR;
 const DOC_CAM_RADIUS = 8.0;   // camera orbits outside the shell, ~2.5 behind the active sphere
-const DOC_ARRIVE_RATE = 5;    // camera glide speed (1/s)
+const DOC_ARRIVE_RATE = 3;    // camera glide speed (1/s)
 const DOC_BLUE  = new THREE.Color(0x3d8bff).multiplyScalar(4);
 const DOC_GREEN = new THREE.Color(0x00ff88).multiplyScalar(4);
 const DOC_FLASH = new THREE.Color(0xd0ffee).multiplyScalar(5);
@@ -1171,21 +1178,26 @@ function makeDocLabel(text, col){
   const c = document.createElement('canvas');
   c.width = 256; c.height = 64;
   const ctx = c.getContext('2d');
-  // dark backing panel so the tag stays readable against bloom/background
-  ctx.fillStyle = 'rgba(3, 8, 22, 0.85)';
-  ctx.beginPath();
-  ctx.roundRect(8, 8, 240, 48, 10);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(120, 180, 255, 0.45)';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  ctx.font = 'bold 28px Consolas, "Courier New", monospace';
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.shadowColor = col; ctx.shadowBlur = 14;
-  ctx.fillStyle = col;
-  ctx.fillText(text, 128, 32);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
+  let curText = text;
+  let curCol = col;
+  function draw(){
+    ctx.clearRect(0, 0, 256, 64);
+    ctx.font = 'bold 30px Consolas, "Courier New", monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    // dark outline for contrast + bright glow (no dark panel, no black box)
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = 'rgba(2, 6, 16, 0.9)';
+    ctx.strokeText(curText, 128, 32);
+    ctx.shadowColor = curCol; ctx.shadowBlur = 10;
+    ctx.fillStyle = curCol;
+    ctx.fillText(curText, 128, 32);
+    ctx.shadowBlur = 0;
+    ctx.fillText(curText, 128, 32);
+    tex.needsUpdate = true;
+  }
+  draw();
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
     map: tex,
     transparent: true, opacity: 0,
@@ -1194,10 +1206,12 @@ function makeDocLabel(text, col){
   sprite.scale.set(2.1, 0.52, 1);
   sprite.frustumCulled = false;
   scene.add(sprite);
+  sprite.setText = (t) => { curText = t; draw(); };
+  sprite.setColor = (col2) => { curCol = col2; draw(); };
   return sprite;
 }
-const docLabelComment = makeDocLabel('COMMENTING\u2026', '#4d9dff');
-const docLabelUpload  = makeDocLabel('UPLOADING\u2026', '#00ff88');
+const docLabel = makeDocLabel('COMMENTING\u2026', '#4d9dff');
+let docLabelPhase = -1; // 0 = commenting, 1 = uploading, 2 = done
 
 // HUD-style processing ring + upload progress arc around the arriving sphere
 const DOC_RING_SEG = 256;
@@ -1262,27 +1276,23 @@ function updateDocs(now, dt){
     docCamLook.lerp(activePos, 1 - Math.exp(-dt * DOC_ARRIVE_RATE * 1.3));
     camera.position.copy(docCamPos);
     camera.lookAt(docCamLook);
-    camera.fov = 40;
+    camera.fov = 45;
     camera.updateProjectionMatrix();
   }
 
-  // --- Labels + mini-constellation on the sphere being processed ---
+  // --- Label + mini-constellation on the sphere being processed ---
   const inFlight = tActive >= 0 && tActive < DOCS_SPHERE_DUR;
   if (inFlight){
     const i = target;
     const ta = tActive;
-    if (ta < COMMENT_TIME){
-      docLabelComment.material.opacity += (0.95 - docLabelComment.material.opacity) * 0.25;
-      docLabelUpload.material.opacity  += (0    - docLabelUpload.material.opacity)  * 0.25;
-    } else if (ta < COMMENT_TIME + UPLOAD_TIME){
-      docLabelComment.material.opacity += (0    - docLabelComment.material.opacity) * 0.25;
-      docLabelUpload.material.opacity  += (0.95 - docLabelUpload.material.opacity)  * 0.25;
-    } else {
-      docLabelComment.material.opacity += (0 - docLabelComment.material.opacity) * 0.25;
-      docLabelUpload.material.opacity  += (0 - docLabelUpload.material.opacity)  * 0.25;
+    const labelPhase = ta < COMMENT_TIME ? 0 : (ta < COMMENT_TIME + UPLOAD_TIME ? 1 : 2);
+    if (labelPhase !== docLabelPhase){
+      docLabelPhase = labelPhase;
+      if (labelPhase === 0){ docLabel.setText('COMMENTING\u2026'); docLabel.setColor('#4d9dff'); }
+      else if (labelPhase === 1){ docLabel.setText('UPLOADING\u2026'); docLabel.setColor('#00ff88'); }
     }
-    docLabelComment.position.copy(activePos).add(docUp);
-    docLabelUpload.position.copy(activePos).add(docUp);
+    docLabel.position.copy(activePos).add(docUp);
+    docLabel.material.opacity += ((labelPhase < 2 ? 0.95 : 0) - docLabel.material.opacity) * 0.2;
     // mini-constellation: edges from the processed sphere to its nearest neighbors
     const cp = docConstPos.array;
     for (let e = 0; e < 3; e++){
@@ -1294,8 +1304,7 @@ function updateDocs(now, dt){
     docConstMat.opacity += (0.8 - docConstMat.opacity) * 0.2;
   } else {
     docConstMat.opacity += (0 - docConstMat.opacity) * 0.15;
-    docLabelComment.material.opacity += (0 - docLabelComment.material.opacity) * 0.15;
-    docLabelUpload.material.opacity  += (0 - docLabelUpload.material.opacity)  * 0.15;
+    docLabel.material.opacity += (0 - docLabel.material.opacity) * 0.15;
   }
 
   // --- processing ring + upload progress arc around the sphere on the shell ---
@@ -1570,6 +1579,8 @@ restartBtn.addEventListener('click', () => {
   docRing.visible = false;
   docRingProg.visible = false;
   docRingProg.geometry.setDrawRange(0, 1);
+  docLabel.material.opacity = 0;
+  docLabelPhase = -1;
 });
 
 /* ================= Main loop ================= */
