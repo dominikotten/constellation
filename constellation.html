@@ -816,16 +816,16 @@ let appearFinished = false;
 let downloadedCount = 0;
 let foundCount = 0;
 let explodeInitialized = false;
-// Comment & Upload (per sphere, sequential)
-const DOCS_PER_SECOND = 2.7;
-const FOCUS_DUR = 0.12, BLUE_DUR = 0.08, GREEN_DUR = 0.08, POP_DUR = 0.09;
-const DOCS_SPHERE_DUR = FOCUS_DUR + BLUE_DUR + GREEN_DUR + POP_DUR; // 0.37
-const DOC_FOCUS = new THREE.Color(0xffffff).multiplyScalar(4);
+// Comment & Upload (camera space-journey to each sphere)
+const WARP_TIME = 1.2;          // camera flight duration per sphere
+const ARRIVE_TIME = 0.6;        // 0.2 comment + 0.2 upload + 0.2 explode
+const DOCS_SPHERE_DUR = WARP_TIME + ARRIVE_TIME;
+const DOCS_PER_SECOND = 1 / DOCS_SPHERE_DUR;
 const DOC_BLUE  = new THREE.Color(0x3d8bff).multiplyScalar(4);
 const DOC_GREEN = new THREE.Color(0x00ff88).multiplyScalar(4);
 const DOC_FLASH = new THREE.Color(0xd0ffee).multiplyScalar(5);
-const camFocus = new THREE.Vector3();
-const camDir = new THREE.Vector3();
+const docHomePos = new THREE.Vector3(0, 3, 15);
+const bezTmp = new THREE.Vector3();
 let docIndex = 0;
 let docStart = 0;
 let docsFinished = false;
@@ -1178,49 +1178,162 @@ function updateImpactWaves(now){
   }
 }
 
-/* ================= Comment & Upload (per sphere, sequential) ================= */
+/* ================= Comment & Upload (camera space-journey to each sphere) ================= */
+// nearest neighbors for the per-sphere mini-constellation
+const nearest = [];
+{
+  const sq = [];
+  for (let i = 0; i < TOTAL; i++) sq.push(perfectPositions[i].lengthSq());
+  for (let i = 0; i < TOTAL; i++){
+    const best = [];
+    for (let j = 0; j < TOTAL; j++){
+      if (i === j) continue;
+      const d = sq[i] + sq[j] - 2 * perfectPositions[i].dot(perfectPositions[j]);
+      best.push([j, d]);
+    }
+    best.sort((a, b) => a[1] - b[1]);
+    nearest[i] = [best[0][0], best[1][0], best[2][0]];
+  }
+}
+// camera view positions (just outside each sphere's radial position)
+const docViewPos = [];
+for (let i = 0; i < TOTAL; i++){
+  docViewPos[i] = perfectPositions[i].clone().normalize().multiplyScalar(SHELL_RADIUS + 1.0);
+}
+// mini-constellation LineSegments (3 edges around the focused sphere)
+const docConstGeo = new THREE.BufferGeometry();
+const docConstPos = new THREE.BufferAttribute(new Float32Array(3 * 2 * 3), 3);
+docConstGeo.setAttribute('position', docConstPos);
+docConstGeo.setDrawRange(0, 6);
+const docConstMat = new THREE.LineBasicMaterial({
+  color: new THREE.Color(0x9fffee).multiplyScalar(2),
+  transparent: true, opacity: 0,
+  blending: THREE.AdditiveBlending, depthWrite: false
+});
+const docConstLines = new THREE.LineSegments(docConstGeo, docConstMat);
+docConstLines.frustumCulled = false;
+scene.add(docConstLines);
+
+function makeDocLabel(text, col){
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 48;
+  const ctx = c.getContext('2d');
+  ctx.font = 'bold 22px Consolas, "Courier New", monospace';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.shadowColor = 'rgba(0,180,255,0.9)'; ctx.shadowBlur = 8;
+  ctx.fillStyle = col;
+  ctx.fillText(text, 128, 24);
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: new THREE.CanvasTexture(c),
+    transparent: true, opacity: 0,
+    blending: THREE.AdditiveBlending, depthWrite: false
+  }));
+  sprite.scale.set(1.7, 0.32, 1);
+  sprite.frustumCulled = false;
+  scene.add(sprite);
+  return sprite;
+}
+const docLabelComment = makeDocLabel('COMMENTING\u2026', '#4d9dff');
+const docLabelUpload  = makeDocLabel('UPLOADING\u2026', '#00ff88');
+
+function easeInOutCubic(t){ return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2; }
+function docBezier(p0, c, p1, t, out){
+  const u = 1 - t;
+  out.set(
+    u*u*p0.x + 2*u*t*c.x + t*t*p1.x,
+    u*u*p0.y + 2*u*t*c.y + t*t*p1.y,
+    u*u*p0.z + 2*u*t*c.z + t*t*p1.z
+  );
+  return out;
+}
+function docFlightControl(from, to){
+  // pull the path inward toward the core -> the long way, past the core
+  return new THREE.Vector3().addVectors(from, to).multiplyScalar(0.25);
+}
+
 function updateDocs(now){
   if (phase !== PHASE_DOCS) return;
   docIndex = Math.min(TOTAL, Math.floor((now - docStart) * DOCS_PER_SECOND));
   docsFinished = docIndex >= TOTAL;
+  controls.enabled = false;
 
-  // point in front of the camera (center of view, closer)
-  camera.getWorldDirection(camDir);
-  camFocus.copy(camera.position).addScaledVector(camDir, 3.5);
+  const active = Math.min(docIndex, TOTAL - 1);
+  const tActive = now - (docStart + active / DOCS_PER_SECOND);
+
+  // --- Camera: space journey ---
+  if (docsFinished){
+    const returnT = Math.min(1, (now - (docStart + (TOTAL - 1) / DOCS_PER_SECOND + DOCS_SPHERE_DUR)) / 1.6);
+    camera.position.lerpVectors(docViewPos[active], docHomePos, easeOutCubic(returnT));
+    camera.lookAt(0, 0, 0);
+    if (returnT >= 1) controls.enabled = true;
+  } else if (tActive < WARP_TIME){
+    const f = easeInOutCubic(tActive / WARP_TIME);
+    const from = active === 0 ? docHomePos : docViewPos[active - 1];
+    const to = docViewPos[active];
+    docBezier(from, docFlightControl(from, to), to, f, camera.position);
+    camera.lookAt(perfectPositions[active]);
+  } else {
+    camera.position.copy(docViewPos[active]);
+    camera.lookAt(perfectPositions[active]);
+  }
+
+  // --- Labels + mini-constellation while arriving ---
+  const inArrival = tActive >= WARP_TIME && tActive < DOCS_SPHERE_DUR;
+  if (inArrival){
+    const i = active;
+    const ta = tActive - WARP_TIME;
+    const sub = ARRIVE_TIME / 3;
+    const activePos = perfectPositions[i];
+    if (ta < sub){
+      docLabelComment.material.opacity += (0.95 - docLabelComment.material.opacity) * 0.25;
+      docLabelUpload.material.opacity  += (0    - docLabelUpload.material.opacity)  * 0.25;
+    } else if (ta < 2 * sub){
+      docLabelComment.material.opacity += (0    - docLabelComment.material.opacity) * 0.25;
+      docLabelUpload.material.opacity  += (0.95 - docLabelUpload.material.opacity)  * 0.25;
+    } else {
+      docLabelComment.material.opacity += (0 - docLabelComment.material.opacity) * 0.25;
+      docLabelUpload.material.opacity  += (0 - docLabelUpload.material.opacity)  * 0.25;
+    }
+    docLabelComment.position.copy(activePos).add(new THREE.Vector3(0, 0.75, 0));
+    docLabelUpload.position.copy(activePos).add(new THREE.Vector3(0, 0.75, 0));
+    const cp = docConstPos.array;
+    for (let e = 0; e < 3; e++){
+      const np = perfectPositions[nearest[i][e]];
+      cp[e*6]     = activePos.x; cp[e*6+1] = activePos.y; cp[e*6+2] = activePos.z;
+      cp[e*6 + 3] = np.x; cp[e*6 + 4] = np.y; cp[e*6 + 5] = np.z;
+    }
+    docConstPos.needsUpdate = true;
+    docConstMat.opacity += (0.8 - docConstMat.opacity) * 0.2;
+  } else {
+    docConstMat.opacity += (0 - docConstMat.opacity) * 0.15;
+    docLabelComment.material.opacity += (0 - docLabelComment.material.opacity) * 0.15;
+    docLabelUpload.material.opacity  += (0 - docLabelUpload.material.opacity)  * 0.15;
+  }
 
   for (let i = 0; i < TOTAL; i++){
     const t = now - (docStart + i / DOCS_PER_SECOND);
     if (t < 0){
-      // not yet processed: stays on the sorted sphere
-      setInstance(i, perfectPositions[i], 1);
+      // not yet processed: faint "preparing" pulse
+      setInstance(i, perfectPositions[i], 1 + 0.03 * Math.sin(now * 2 + i * 0.7));
       continue;
     }
     if (t >= DOCS_SPHERE_DUR){
-      // done: sphere is gone
-      setInstance(i, CENTER, 0);
+      setInstance(i, CENTER, 0); // done: gone
       continue;
     }
-    // active sphere: focus -> blue (comment) -> green (upload) -> explosion
-    let col;
-    if (t < FOCUS_DUR){
-      const f = easeOutCubic(t / FOCUS_DUR);
-      dummy.position.copy(perfectPositions[i]).lerp(camFocus, f);
-      dummy.scale.setScalar(1 + 2 * f);
-      col = DOC_FOCUS;
-    } else if (t < FOCUS_DUR + BLUE_DUR){
-      dummy.position.copy(camFocus);
-      dummy.scale.setScalar(3);
-      col = DOC_BLUE;
-    } else if (t < FOCUS_DUR + BLUE_DUR + GREEN_DUR){
-      dummy.position.copy(camFocus);
-      dummy.scale.setScalar(3);
-      col = DOC_GREEN;
-    } else {
-      const f = (t - (FOCUS_DUR + BLUE_DUR + GREEN_DUR)) / POP_DUR;
-      dummy.position.copy(camFocus);
-      dummy.scale.setScalar(3 + f * 2);
-      col = DOC_FLASH;
+    if (t < WARP_TIME){
+      // target sphere: brighter "being prepared" pulse
+      setInstance(i, perfectPositions[i], 1 + 0.07 * Math.sin(now * 4 + i));
+      continue;
     }
+    // arrival: grow + color
+    const ta = t - WARP_TIME;
+    let col;
+    if (ta < ARRIVE_TIME / 3) col = DOC_BLUE;
+    else if (ta < 2 * ARRIVE_TIME / 3) col = DOC_GREEN;
+    else col = DOC_FLASH;
+    dummy.position.copy(perfectPositions[i]);
+    dummy.scale.setScalar(1 + 1.5 * Math.min(1, ta / ARRIVE_TIME));
     dummy.updateMatrix();
     pointField.setMatrixAt(i, dummy.matrix);
     pointField.setColorAt(i, col);
@@ -1365,6 +1478,8 @@ restartBtn.addEventListener('click', () => {
     docStart = performance.now() / 1000;
     docIndex = 0;
     docsFinished = false;
+    docHomePos.copy(camera.position);
+    controls.enabled = false;
     phase = PHASE_DOCS;
     return;
   }
@@ -1412,6 +1527,7 @@ restartBtn.addEventListener('click', () => {
   core.scale.setScalar(1);
   coreMat.uniforms.uGlow.value = coreGlow;
   coreLight.intensity = CORE_LIGHT_BASE * coreGlow;
+  controls.enabled = true;
 });
 
 /* ================= Main loop ================= */
