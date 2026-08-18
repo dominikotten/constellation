@@ -550,7 +550,7 @@ function updateFloatTexts(now){
     target = 0.95;
     // words slowly emerge from the core and swell outward during processing
     const p = Math.min(1, (now - processStart) / PROCESS_DURATION);
-    expand = 0.5 + 0.65 * easeInOutCubic(p);
+    expand = 0.05 + 1.1 * easeInOutCubic(p); // start at the core center, draw outward
   } else if (pulling){
     target = 0.95;
     // quickly pull the formulas into the core (first 0.35s of the pause)
@@ -587,9 +587,9 @@ function updateFloatTexts(now){
 
     const pulse = 0.75 + 0.25 * Math.sin(now * 1.6 + ft.phase * 3);
     const o = target * fade * pulse;
-    ft.sprite.material.opacity += (o - ft.sprite.material.opacity) * 0.12;
-    ft.underline.material.opacity += (o * 0.8 - ft.underline.material.opacity) * 0.12;
-    ft.line.material.opacity += (o * 0.6 - ft.line.material.opacity) * 0.12;
+    ft.sprite.material.opacity += (o - ft.sprite.material.opacity) * 0.09;
+    ft.underline.material.opacity += (o * 0.8 - ft.underline.material.opacity) * 0.09;
+    ft.line.material.opacity += (o * 0.6 - ft.line.material.opacity) * 0.09;
   }
 }
 
