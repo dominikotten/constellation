@@ -1,0 +1,11 @@
+# VS Code
+.vscode/
+
+# Temporäre Test-/Hilfsdateien
+_test.html
+_check.mjs
+_dom.html
+_err.log
+_shot*.png
+_profile/
+_p2/
