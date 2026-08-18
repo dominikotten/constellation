@@ -739,10 +739,14 @@ const DOC_FLASH = new THREE.Color(0xd0ffee).multiplyScalar(5);
 const docHomePos = new THREE.Vector3(0, 3, 15);
 const docUp = new THREE.Vector3(0, 0.8, 0);
 const tmpDir = new THREE.Vector3();
+const tmpPerp = new THREE.Vector3();
 const docActivePos = new THREE.Vector3();
+const docGaze = new THREE.Vector3(0, 0, 0); // smoothed camera look target
+const docColTmp = new THREE.Color();
 let docIndex = 0;
 let docStart = 0;
 let docsFinished = false;
+let docBurstDone = -1;
 
 function shuffle(a){
   for (let i = a.length - 1; i > 0; i--){
@@ -1164,6 +1168,93 @@ function makeDocLabel(text, col){
 const docLabelComment = makeDocLabel('COMMENTING\u2026', '#4d9dff');
 const docLabelUpload  = makeDocLabel('UPLOADING\u2026', '#00ff88');
 
+// HUD-style processing ring + upload progress arc around the arriving sphere
+const DOC_RING_SEG = 256;
+const RING_COMMENT = new THREE.Color(0x4d9dff);
+const RING_UPLOAD  = new THREE.Color(0x00ff88);
+function makeDocRingGeo(){
+  const arr = new Float32Array((DOC_RING_SEG + 1) * 3);
+  for (let i = 0; i <= DOC_RING_SEG; i++){
+    const a = (i / DOC_RING_SEG) * Math.PI * 2;
+    arr[i*3] = Math.cos(a); arr[i*3+1] = 0; arr[i*3+2] = Math.sin(a);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+  return g;
+}
+const docRingGeo  = makeDocRingGeo();
+const docRingGeoP = makeDocRingGeo();
+const docRing = new THREE.Line(docRingGeo, new THREE.LineBasicMaterial({
+  color: RING_COMMENT, transparent: true, opacity: 0,
+  blending: THREE.AdditiveBlending, depthWrite: false
+}));
+const docRingProg = new THREE.Line(docRingGeoP, new THREE.LineBasicMaterial({
+  color: RING_UPLOAD, transparent: true, opacity: 0,
+  blending: THREE.AdditiveBlending, depthWrite: false
+}));
+docRing.frustumCulled = false;
+docRingProg.frustumCulled = false;
+docRing.visible = false;
+docRingProg.visible = false;
+scene.add(docRing);
+scene.add(docRingProg);
+
+// small particle burst at each arrival (expanding from the sphere)
+const DOC_BURSTS = 16;
+const DOC_BURST_PART = 10;
+const dbGeo = new THREE.BufferGeometry();
+const dbPos = new THREE.BufferAttribute(new Float32Array(DOC_BURSTS * DOC_BURST_PART * 3), 3);
+const dbCol = new THREE.BufferAttribute(new Float32Array(DOC_BURSTS * DOC_BURST_PART * 3), 3);
+dbGeo.setAttribute('position', dbPos);
+dbGeo.setAttribute('color', dbCol);
+dbGeo.setDrawRange(0, 0);
+const docBurstMat = new THREE.PointsMaterial({
+  size: 0.1, vertexColors: true, transparent: true,
+  blending: THREE.AdditiveBlending, depthWrite: false
+});
+const docBurstPts = new THREE.Points(dbGeo, docBurstMat);
+docBurstPts.frustumCulled = false;
+scene.add(docBurstPts);
+const docBursts = [];
+for (let b = 0; b < DOC_BURSTS; b++){
+  const dirs = [];
+  for (let i = 0; i < DOC_BURST_PART; i++) dirs.push(new THREE.Vector3());
+  docBursts.push({ active: false, t0: 0, pos: new THREE.Vector3(), dirs, speeds: new Float32Array(DOC_BURST_PART) });
+}
+let docBurstSlot = 0;
+function spawnDocBurst(now, pos){
+  const b = docBursts[docBurstSlot];
+  docBurstSlot = (docBurstSlot + 1) % DOC_BURSTS;
+  b.active = true;
+  b.t0 = now;
+  b.pos.copy(pos);
+  for (let i = 0; i < DOC_BURST_PART; i++){
+    b.dirs[i].randomDirection();
+    b.speeds[i] = 1.2 + Math.random() * 2.2;
+  }
+}
+function updateDocBursts(now){
+  let maxSlot = -1;
+  for (let b = 0; b < DOC_BURSTS; b++){
+    const burst = docBursts[b];
+    if (!burst.active) continue;
+    const t = (now - burst.t0) / 0.55;
+    if (t >= 1){ burst.active = false; continue; }
+    const fade = 1 - t;
+    for (let i = 0; i < DOC_BURST_PART; i++){
+      const slot = b * DOC_BURST_PART + i;
+      const d = burst.dirs[i];
+      const dist = burst.speeds[i] * t;
+      dbPos.setXYZ(slot, burst.pos.x + d.x * dist, burst.pos.y + d.y * dist, burst.pos.z + d.z * dist);
+      dbCol.setXYZ(slot, 1 * fade, 0.95 * fade, 0.7 * fade);
+      if (slot > maxSlot) maxSlot = slot;
+    }
+  }
+  dbGeo.setDrawRange(0, maxSlot + 1);
+  dbPos.needsUpdate = true;
+  dbCol.needsUpdate = true;
+}
+
 function easeInOutCubic(t){ return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2; }
 
 function docSpherePos(idx, t, out){
@@ -1175,10 +1266,16 @@ function docSpherePos(idx, t, out){
   const nz = DOC_CAM_POS.z + tmpDir.z * 0.8;
   if (t < FLY_TIME){
     const f = easeInOutCubic(t / FLY_TIME);
+    // spiral arc: the sphere curves in instead of flying a dead-straight line
+    tmpPerp.crossVectors(tmpDir, upVec);
+    if (tmpPerp.lengthSq() < 1e-6) tmpPerp.set(1, 0, 0);
+    tmpPerp.normalize();
+    tmpPerp.applyAxisAngle(tmpDir, f * Math.PI * 2);
+    const arc = Math.sin(f * Math.PI) * 0.55;
     out.set(
-      perfectPositions[idx].x + (nx - perfectPositions[idx].x) * f,
-      perfectPositions[idx].y + (ny - perfectPositions[idx].y) * f,
-      perfectPositions[idx].z + (nz - perfectPositions[idx].z) * f
+      perfectPositions[idx].x + (nx - perfectPositions[idx].x) * f + tmpPerp.x * arc,
+      perfectPositions[idx].y + (ny - perfectPositions[idx].y) * f + tmpPerp.y * arc,
+      perfectPositions[idx].z + (nz - perfectPositions[idx].z) * f + tmpPerp.z * arc
     );
   } else {
     out.set(nx, ny, nz);
@@ -1212,8 +1309,12 @@ function updateDocs(now, dt){
     camera.updateProjectionMatrix();
   } else {
     camera.position.copy(DOC_CAM_POS);
+    // subtle drift so the view feels alive instead of frozen
+    camera.position.x += Math.sin(now * 0.35) * 0.06;
+    camera.position.y += Math.sin(now * 0.5 + 1.7) * 0.05;
     docSpherePos(target, tActive, tmpDir);
-    camera.lookAt(tmpDir);
+    docGaze.lerp(tmpDir, 1 - Math.exp(-dt * 4)); // smooth gaze, no hard look jumps
+    camera.lookAt(docGaze);
     camera.fov = 45;
     camera.updateProjectionMatrix();
   }
@@ -1252,6 +1353,51 @@ function updateDocs(now, dt){
     docLabelUpload.material.opacity  += (0 - docLabelUpload.material.opacity)  * 0.15;
   }
 
+  // --- processing ring + upload progress arc around the flying sphere ---
+  let ringOp = 0, ringOpP = 0;
+  if (inFlight){
+    docRing.visible = true;
+    docRingProg.visible = true;
+    docRing.position.copy(docActivePos);
+    docRingProg.position.copy(docActivePos);
+    docRing.lookAt(DOC_CAM_POS);
+    docRingProg.lookAt(DOC_CAM_POS);
+    docRing.rotateZ(dt * 1.7);
+    docRingProg.rotateZ(dt * 1.7);
+    if (tActive < FLY_TIME){
+      const f = tActive / FLY_TIME;
+      docRing.scale.setScalar((0.5 + f * 0.3) * (1 + Math.sin(now * 6) * 0.06));
+      if (tActive < FLY_TIME / 2){
+        docRing.material.color.copy(RING_COMMENT);
+        ringOp = 0.9;
+      } else {
+        const prog = (tActive - FLY_TIME / 2) / (FLY_TIME / 2);
+        docRing.material.color.copy(RING_UPLOAD);
+        docRingProg.geometry.setDrawRange(0, Math.round(1 + prog * DOC_RING_SEG));
+        ringOp = 0.9;
+        ringOpP = 0.95;
+      }
+    } else {
+      const e = Math.min(1, (tActive - FLY_TIME) / ARRIVE_TIME);
+      docRing.material.color.setRGB(0.95, 1, 0.92);
+      docRing.scale.setScalar(0.8 + e * 2.4);
+      ringOp = 0.9 * (1 - e);
+      ringOpP = 0.95 * (1 - e);
+    }
+  } else {
+    docRingProg.geometry.setDrawRange(0, 1); // reset progress arc
+  }
+  docRing.material.opacity += (ringOp - docRing.material.opacity) * 0.3;
+  docRingProg.material.opacity += (ringOpP - docRingProg.material.opacity) * 0.3;
+  if (ringOp <= 0.01 && docRing.material.opacity < 0.02) docRing.visible = false;
+  if (ringOpP <= 0.01 && docRingProg.material.opacity < 0.02) docRingProg.visible = false;
+
+  // spawn the burst when a sphere arrives
+  if (!docsFinished && tActive >= FLY_TIME && docBurstDone < docIndex){
+    spawnDocBurst(now, docActivePos);
+    docBurstDone = docIndex;
+  }
+
   for (let i = 0; i < TOTAL; i++){
     const idx = docOrder[i];
     const t = now - (docStart + i / DOCS_PER_SECOND);
@@ -1266,22 +1412,22 @@ function updateDocs(now, dt){
     }
     // the sphere flies toward the camera, then explodes
     docSpherePos(idx, t, tmpDir);
-    let col;
     let scale;
     if (t < FLY_TIME){
       const f = t / FLY_TIME;
       scale = 1 + 2 * f;
-      col = f < 0.5 ? DOC_BLUE : DOC_GREEN;
+      const g = Math.min(1, Math.max(0, (f - 0.35) / 0.3)); // blue->green crossfade
+      docColTmp.copy(DOC_BLUE).lerp(DOC_GREEN, g);
     } else {
       const e = (t - FLY_TIME) / ARRIVE_TIME;
       scale = 3 + e * 2;
-      col = DOC_FLASH;
+      docColTmp.copy(DOC_GREEN).lerp(DOC_FLASH, Math.min(1, e * 1.6));
     }
     dummy.position.copy(tmpDir);
     dummy.scale.setScalar(scale);
     dummy.updateMatrix();
     pointField.setMatrixAt(i, dummy.matrix);
-    pointField.setColorAt(idx, col);
+    pointField.setColorAt(idx, docColTmp);
   }
   pointField.instanceMatrix.needsUpdate = true;
   pointField.instanceColor.needsUpdate = true;
@@ -1475,6 +1621,14 @@ restartBtn.addEventListener('click', () => {
   controls.enabled = true;
   camera.fov = 45;
   camera.updateProjectionMatrix();
+  docRing.material.opacity = 0;
+  docRingProg.material.opacity = 0;
+  docRing.visible = false;
+  docRingProg.visible = false;
+  docRingProg.geometry.setDrawRange(0, 1);
+  for (const b of docBursts) b.active = false;
+  docBurstDone = -1;
+  docGaze.set(0, 0, 0);
 });
 
 /* ================= Main loop ================= */
@@ -1500,6 +1654,7 @@ function animate(nowMs){
   updateFloatTexts(timeNow);
   updateImpactWaves(timeNow);
   updateDocs(timeNow, dt);
+  updateDocBursts(timeNow);
   updateParticles(dt);
   updateShockwave(timeNow);
   updateHover(timeNow);
